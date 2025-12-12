@@ -5,11 +5,11 @@
  *  it under the terms of either the GNU General Public License as published by
  *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
  *  the 3 clause BSD License (BSD-3-Clause).
- *  
+ *
  *  If you wish to use this software under the GPL-3.0-only license, remove
  *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
- *  
+ *
  *  If you wish to use this software under the BSD-3-Clause license, remove
  *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
@@ -95,7 +95,7 @@ fn verify_code_with_skew(
 
     let totp = TOTP::new(
         Algorithm::SHA1,
-        6,  // digits
+        6, // digits
         skew,
         30, // step (30 seconds)
         secret_bytes,

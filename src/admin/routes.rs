@@ -5,11 +5,11 @@
  *  it under the terms of either the GNU General Public License as published by
  *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
  *  the 3 clause BSD License (BSD-3-Clause).
- *  
+ *
  *  If you wish to use this software under the GPL-3.0-only license, remove
  *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
- *  
+ *
  *  If you wish to use this software under the BSD-3-Clause license, remove
  *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
@@ -32,7 +32,6 @@ use crate::email::EmailService;
 use crate::errors::{AppError, AppResult};
 use crate::security_callbacks::AppRateLimitCallbacks;
 use crate::settings::SettingsService;
-use axum_tower_sessions_csrf::get_or_create_token;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -42,6 +41,7 @@ use axum::{
     Router,
 };
 use axum_login::AuthSession;
+use axum_tower_sessions_csrf::get_or_create_token;
 use basic_axum_rate_limit::{rate_limit_middleware, RateLimiter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -562,7 +562,9 @@ async fn change_password(
         .map_err(|e| AppError::AuthError(e.to_string()))?;
 
     if !password_valid {
-        return Err(AppError::AuthError("Current password is incorrect".to_string()));
+        return Err(AppError::AuthError(
+            "Current password is incorrect".to_string(),
+        ));
     }
 
     // Validate new password
@@ -660,9 +662,7 @@ async fn forgot_password_verify_mfa(
     let admin = match admin {
         Some(a) => a,
         None => {
-            return Err(AppError::AuthError(
-                "Invalid verification code".to_string(),
-            ));
+            return Err(AppError::AuthError("Invalid verification code".to_string()));
         }
     };
 
@@ -670,7 +670,8 @@ async fn forgot_password_verify_mfa(
     if let Some(expires_at) = admin.password_reset_token_expires_at {
         if chrono::Utc::now() < expires_at.with_timezone(&chrono::Utc) {
             return Err(AppError::AuthError(
-                "Password reset already requested. Please wait for the current request to expire.".to_string(),
+                "Password reset already requested. Please wait for the current request to expire."
+                    .to_string(),
             ));
         }
     }
@@ -680,9 +681,7 @@ async fn forgot_password_verify_mfa(
     if !totp_enabled {
         // User has no MFA - return same error for enumeration protection
         // Rate limiter will block repeated attempts
-        return Err(AppError::AuthError(
-            "Invalid verification code".to_string(),
-        ));
+        return Err(AppError::AuthError("Invalid verification code".to_string()));
     }
 
     // Get the decrypted TOTP secret
@@ -698,9 +697,7 @@ async fn forgot_password_verify_mfa(
         .map_err(|e| AppError::AuthError(format!("Failed to verify code: {}", e)))?;
 
     if !is_valid {
-        return Err(AppError::AuthError(
-            "Invalid verification code".to_string(),
-        ));
+        return Err(AppError::AuthError("Invalid verification code".to_string()));
     }
 
     // Create reset token

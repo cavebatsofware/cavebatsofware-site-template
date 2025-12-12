@@ -5,11 +5,11 @@
  *  it under the terms of either the GNU General Public License as published by
  *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
  *  the 3 clause BSD License (BSD-3-Clause).
- *  
+ *
  *  If you wish to use this software under the GPL-3.0-only license, remove
  *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
- *  
+ *
  *  If you wish to use this software under the BSD-3-Clause license, remove
  *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
@@ -129,9 +129,7 @@ mod tests {
         let result = PasswordValidator::validate("Short1!", "test@example.com");
         assert!(result.is_err());
         let errors = result.unwrap_err();
-        assert!(errors
-            .iter()
-            .any(|e| e.contains("at least 16 characters")));
+        assert!(errors.iter().any(|e| e.contains("at least 16 characters")));
     }
 
     #[test]
@@ -168,8 +166,7 @@ mod tests {
 
     #[test]
     fn test_contains_email() {
-        let result =
-            PasswordValidator::validate("test@example.com!A1bc", "test@example.com");
+        let result = PasswordValidator::validate("test@example.com!A1bc", "test@example.com");
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("email")));

@@ -5,11 +5,11 @@
  *  it under the terms of either the GNU General Public License as published by
  *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
  *  the 3 clause BSD License (BSD-3-Clause).
- *  
+ *
  *  If you wish to use this software under the GPL-3.0-only license, remove
  *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
- *  
+ *
  *  If you wish to use this software under the BSD-3-Clause license, remove
  *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
  *  unless you would like to dual-license your modifications to the software.
@@ -36,9 +36,7 @@ use axum_login::AuthManagerLayerBuilder;
 use std::{env, sync::Arc};
 use time::Duration as TimeDuration;
 use tower::ServiceBuilder;
-use tower_http::{
-    services::ServeDir, set_header::SetResponseHeaderLayer, trace::TraceLayer,
-};
+use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::TraceLayer};
 use tower_sessions::{Expiry, SessionManagerLayer};
 use tower_sessions_memory_store::MemoryStore;
 
@@ -334,9 +332,7 @@ async fn main() -> anyhow::Result<()> {
                     header::CACHE_CONTROL,
                     header::HeaderValue::from_static("public, max-age=86400"), // 1 day
                 ))
-                .service(
-                    ServeDir::new("./admin-assets/assets").precompressed_gzip()
-                ),
+                .service(ServeDir::new("./admin-assets/assets").precompressed_gzip()),
         )
         .route("/admin", get(serve_admin_spa))
         .route("/admin/{*path}", get(serve_admin_spa))
@@ -348,9 +344,7 @@ async fn main() -> anyhow::Result<()> {
                     header::CACHE_CONTROL,
                     header::HeaderValue::from_static("public, max-age=86400"), // 1 day
                 ))
-                .service(
-                    ServeDir::new("./assets").precompressed_gzip()
-                ),
+                .service(ServeDir::new("./assets").precompressed_gzip()),
         )
         // Public Astro site - serve from root as fallback
         .fallback_service(
@@ -359,9 +353,7 @@ async fn main() -> anyhow::Result<()> {
                     header::CACHE_CONTROL,
                     header::HeaderValue::from_static("public, max-age=0"), // 1 minute
                 ))
-                .service(
-                    ServeDir::new("./public-assets").precompressed_gzip()
-                ),
+                .service(ServeDir::new("./public-assets").precompressed_gzip()),
         )
         .with_state(state.clone());
 
