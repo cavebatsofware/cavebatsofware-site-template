@@ -1,0 +1,195 @@
+/*  This file is part of a basic website template project - cavebatsofware-site-template
+ *  Copyright (C) 2025 Grant DeFayette & Cavebatsoftware LLC
+ *
+ *  cavebatsofware-site-template is free software: you can redistribute it and/or modify
+ *  it under the terms of either the GNU General Public License as published by
+ *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
+ *  the 3 clause BSD License (BSD-3-Clause).
+ *  
+ *  If you wish to use this software under the GPL-3.0-only license, remove
+ *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *  
+ *  If you wish to use this software under the BSD-3-Clause license, remove
+ *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *
+ *  cavebatsofware-site-template is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License and BSD 3 Clause License
+ *  along with cavebatsofware-site-template.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
+ *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
+ */
+
+use crate::{email::EmailService, errors::AppResult};
+use axum::{
+    extract::State, http::StatusCode, response::IntoResponse, routing::post, Extension, Json,
+    Router,
+};
+use basic_axum_rate_limit::SecurityContext;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct ContactState {
+    pub email_service: Arc<EmailService>,
+    pub callbacks: crate::security_callbacks::AppRateLimitCallbacks,
+}
+
+#[derive(Deserialize)]
+pub struct ContactFormRequest {
+    name: String,
+    email: String,
+    subject: String,
+    message: String,
+}
+
+#[derive(Serialize)]
+pub struct ContactFormResponse {
+    success: bool,
+    message: String,
+}
+
+pub fn contact_routes() -> Router<ContactState> {
+    Router::new().route("/api/contact", post(submit_contact_form))
+}
+
+async fn submit_contact_form(
+    State(state): State<ContactState>,
+    Extension(security_context): Extension<SecurityContext>,
+    Json(payload): Json<ContactFormRequest>,
+) -> AppResult<impl IntoResponse> {
+    // Validate input lengths
+    if payload.name.trim().is_empty()
+        || payload.name.len() > 100
+        || payload.email.trim().is_empty()
+        || payload.email.len() > 254
+        || payload.subject.trim().is_empty()
+        || payload.subject.len() > 200
+        || payload.message.trim().is_empty()
+        || payload.message.len() > 5000
+    {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(ContactFormResponse {
+                success: false,
+                message: "Invalid input. Please check your form fields.".to_string(),
+            }),
+        ));
+    }
+
+    // Basic email validation
+    if !payload.email.contains('@') || !payload.email.contains('.') {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(ContactFormResponse {
+                success: false,
+                message: "Invalid email address.".to_string(),
+            }),
+        ));
+    }
+
+    // Check if this IP has submitted a contact form in the last 24 hours
+    let contact_key = format!("contact_form:{}", security_context.ip_address);
+
+    let ip_addr = security_context
+        .ip_address
+        .parse::<std::net::IpAddr>()
+        .map_err(|e| {
+            tracing::error!("Failed to parse IP address: {}", e);
+            crate::errors::AppError::AuthError("Invalid IP address".to_string())
+        })?;
+
+    let has_recent_submission = state
+        .callbacks
+        .has_recent_contact_submission(ip_addr)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to check contact form rate limit: {}", e);
+            e
+        })
+        .unwrap_or(false);
+
+    if has_recent_submission {
+        tracing::warn!(
+            "Contact form rate limit exceeded for IP: {}",
+            security_context.ip_address
+        );
+        return Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ContactFormResponse {
+                success: false,
+                message: "You have recently submitted this contact form.".to_string(),
+            }),
+        ));
+    }
+
+    // Send email
+    match state
+        .email_service
+        .send_contact_form_email(
+            payload.name.trim(),
+            payload.email.trim(),
+            payload.subject.trim(),
+            payload.message.trim(),
+        )
+        .await
+    {
+        Ok(_) => {
+            let _ = state
+                .callbacks
+                .log_access_attempt(
+                    Some(ip_addr),
+                    Some(security_context.user_agent.clone()),
+                    &contact_key,
+                    "contact_form_submit",
+                    true,
+                    0.0, // Not rate-limited
+                    None,
+                    None,
+                )
+                .await;
+
+            tracing::info!(
+                "Contact form submitted successfully from {} ({})",
+                payload.email,
+                security_context.ip_address
+            );
+            Ok((
+                StatusCode::OK,
+                Json(ContactFormResponse {
+                    success: true,
+                    message: "Thank you for your message! I'll get back to you soon.".to_string(),
+                }),
+            ))
+        }
+        Err(e) => {
+            tracing::error!("Failed to send contact form email: {}", e);
+
+            let _ = state
+                .callbacks
+                .log_access_attempt(
+                    Some(ip_addr),
+                    Some(security_context.user_agent.clone()),
+                    &contact_key,
+                    "contact_form_submit",
+                    false,
+                    0.0, // Not rate-limited
+                    None,
+                    None,
+                )
+                .await;
+
+            Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ContactFormResponse {
+                    success: false,
+                    message: "Failed to send message. Please try again later.".to_string(),
+                }),
+            ))
+        }
+    }
+}

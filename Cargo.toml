@@ -1,0 +1,59 @@
+[package]
+name = "cavebatsofware-site-template"
+version = "0.26.2"
+edition = "2021"
+
+[features]
+default = []
+loadtest = ["basic-axum-rate-limit/metrics"]
+
+[dependencies]
+basic-axum-rate-limit = "0.2.2"
+axum-tower-sessions-csrf = "0.1.0"
+axum = { version = "0.8.6", features = ["multipart"] }
+tokio = { version = "1.48.0", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["fs", "trace", "set-header"] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.20"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.143"
+anyhow = "1.0.100"
+dotenvy = "0.15.7"
+sea-orm = { version = "1.1.19", features = ["sqlx-postgres", "runtime-tokio-rustls", "with-time", "with-uuid", "macros"] }
+sea-orm-migration = "1.1.19"
+chrono = { version = "0.4.42", features = ["serde"] }
+dashmap = "6.1.0"
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+thiserror = "2.0.17"
+argon2 = "0.5.3"
+rand = "0.9.2"
+hex = "0.4.3"
+async-trait = "0.1.89"
+# Admin authentication dependencies
+axum-login = "0.18"
+tower-sessions = "0.14"
+tower-sessions-memory-store = "0.14"
+# AWS services
+aws-config = "1.8.12"
+aws-sdk-sesv2 = "1.109.0"
+aws-sdk-s3 = "1.117.0"
+# Time for session expiry
+time = "0.3.44"
+# DOCX handling (ZIP archive manipulation)
+zip = "6.0.0"
+# TOTP for MFA
+totp-rs = { version = "5.7", features = ["qr", "gen_secret"] }
+# Security hardening
+aes-gcm = { version = "0.10.3" }
+base64 = { version = "0.22.1" }
+lazy_static = { version = "1.5.0" }
+
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+tempfile = "3.23"
+serial_test = "3.2.0"
+axum-test = "18.4.1"
+reqwest = { version = "0.12.25", default-features = false, features = ["json", "rustls-tls"] }
+tower = { version = "0.5.2", features = ["util"] }

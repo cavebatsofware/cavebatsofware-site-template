@@ -1,0 +1,108 @@
+/*  This file is part of a basic website template project - cavebatsofware-site-template
+ *  Copyright (C) 2025 Grant DeFayette & Cavebatsoftware LLC
+ *
+ *  cavebatsofware-site-template is free software: you can redistribute it and/or modify
+ *  it under the terms of either the GNU General Public License as published by
+ *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
+ *  the 3 clause BSD License (BSD-3-Clause).
+ *  
+ *  If you wish to use this software under the GPL-3.0-only license, remove
+ *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *  
+ *  If you wish to use this software under the BSD-3-Clause license, remove
+ *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *
+ *  cavebatsofware-site-template is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License and BSD 3 Clause License
+ *  along with cavebatsofware-site-template.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
+ *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
+ */
+
+use anyhow::Result;
+use aws_sdk_s3::Client;
+use std::env;
+
+#[derive(Clone)]
+pub struct S3Service {
+    client: Client,
+    bucket_name: String,
+}
+
+impl S3Service {
+    pub async fn new() -> Result<Self> {
+        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .load()
+            .await;
+        let client = Client::new(&config);
+        let bucket_name =
+            env::var("S3_BUCKET_NAME").unwrap_or_else(|_| "cavebatsofware-site-template-documents".to_string());
+
+        Ok(Self {
+            client,
+            bucket_name,
+        })
+    }
+
+    /// Fetch a file from S3 at path: {code}/{filename}
+    /// For example: get_file("ABC123", "index.html") fetches s3://bucket/ABC123/index.html
+    pub async fn get_file(&self, code: &str, filename: &str) -> Result<Vec<u8>> {
+        let key = format!("{}/{}", code, filename);
+
+        tracing::info!("Fetching from S3: bucket={}, key={}", self.bucket_name, key);
+
+        let response = self
+            .client
+            .get_object()
+            .bucket(&self.bucket_name)
+            .key(&key)
+            .send()
+            .await?;
+
+        let data = response.body.collect().await?;
+        let bytes = data.into_bytes().to_vec();
+
+        tracing::info!("Successfully fetched {} bytes from S3", bytes.len());
+        Ok(bytes)
+    }
+
+    /// Upload a file to S3 at path: {code}/{filename}
+    /// For example: upload_file("ABC123", "index.html", bytes) uploads to s3://bucket/ABC123/index.html
+    pub async fn upload_file(&self, code: &str, filename: &str, data: Vec<u8>) -> Result<()> {
+        let key = format!("{}/{}", code, filename);
+
+        tracing::info!(
+            "Uploading to S3: bucket={}, key={}, size={} bytes",
+            self.bucket_name,
+            key,
+            data.len()
+        );
+
+        // Determine content type based on filename
+        let content_type = match filename {
+            f if f.ends_with(".html") => "text/html",
+            f if f.ends_with(".pdf") => "application/pdf",
+            f if f.ends_with(".docx") => {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+            _ => "application/octet-stream",
+        };
+
+        self.client
+            .put_object()
+            .bucket(&self.bucket_name)
+            .key(&key)
+            .body(data.into())
+            .content_type(content_type)
+            .send()
+            .await?;
+
+        tracing::info!("Successfully uploaded {} to S3", key);
+        Ok(())
+    }
+}

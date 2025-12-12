@@ -1,0 +1,142 @@
+---
+/*  This file is part of a basic website template project - cavebatsofware-site-template
+ *  Copyright (C) 2025 Grant DeFayette & Cavebatsoftware LLC
+ *
+ *  cavebatsofware-site-template is free software: you can redistribute it and/or modify
+ *  it under the terms of either the GNU General Public License as published by
+ *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
+ *  the 3 clause BSD License (BSD-3-Clause).
+ *  
+ *  If you wish to use this software under the GPL-3.0-only license, remove
+ *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *  
+ *  If you wish to use this software under the BSD-3-Clause license, remove
+ *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *
+ *  cavebatsofware-site-template is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License and BSD 3 Clause License
+ *  along with cavebatsofware-site-template.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
+ *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
+ */
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content="Personal Site Template" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<title>Welcome</title>
+		<style>
+			:root {
+				--accent: 136, 58, 234;
+				--accent-light: 224, 204, 250;
+				--accent-dark: 49, 10, 101;
+				--accent-gradient: linear-gradient(
+					45deg,
+					rgb(var(--accent)),
+					rgb(var(--accent-light)) 30%,
+					white 60%
+				);
+			}
+			html {
+				font-family: system-ui, sans-serif;
+				background: #13151a;
+				background-size: 224px;
+			}
+			code {
+				font-family:
+					Menlo,
+					Monaco,
+					Lucida Console,
+					Liberation Mono,
+					DejaVu Sans Mono,
+					Bitstream Vera Sans Mono,
+					Courier New,
+					monospace;
+			}
+			main {
+				margin: auto;
+				padding: 1rem;
+				width: 800px;
+				max-width: calc(100% - 2rem);
+				color: white;
+				font-size: 20px;
+				line-height: 1.6;
+			}
+			.astro-a {
+				position: absolute;
+				top: -32px;
+				left: 50%;
+				transform: translatex(-50%);
+				width: 220px;
+				height: auto;
+				z-index: -1;
+			}
+			h1 {
+				font-size: 4rem;
+				font-weight: 700;
+				line-height: 1;
+				text-align: center;
+				margin-bottom: 1em;
+			}
+			.text-gradient {
+				background-image: var(--accent-gradient);
+				-webkit-background-clip: text;
+				-webkit-text-fill-color: transparent;
+				background-size: 400%;
+				background-position: 0%;
+			}
+			.instructions {
+				margin-bottom: 2rem;
+				border: 1px solid rgba(var(--accent-light), 25%);
+				background: linear-gradient(rgba(var(--accent-dark), 66%), rgba(var(--accent-dark), 33%));
+				padding: 1.5rem;
+				border-radius: 8px;
+			}
+			.instructions code {
+				font-size: 0.8em;
+				font-weight: bold;
+				background: rgba(var(--accent-light), 12%);
+				color: rgb(var(--accent-light));
+				border-radius: 4px;
+				padding: 0.3em 0.4em;
+			}
+			.instructions strong {
+				color: rgb(var(--accent-light));
+			}
+			.link-card-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(24ch, 1fr));
+				gap: 2rem;
+				padding: 0;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>Welcome to <span class="text-gradient">Personal Site</span></h1>
+			<p class="instructions">
+				This is the default template. To use your own Astro site, set the
+				<code>PUBLIC_FRONTEND_PATH</code> environment variable to point to your custom Astro project.
+			</p>
+			<p class="instructions">
+				<strong>For local development:</strong><br />
+				Add to your <code>.env</code> file:<br />
+				<code>PUBLIC_FRONTEND_PATH=/path/to/your/astro-site</code>
+			</p>
+			<p class="instructions">
+				<strong>For Docker builds:</strong><br />
+				Copy your content before building:<br />
+				<code>cp -r /path/to/your/astro-site/src public-frontend/src</code>
+			</p>
+		</main>
+	</body>
+</html>

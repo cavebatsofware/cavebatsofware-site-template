@@ -1,0 +1,104 @@
+/*  This file is part of a basic website template project - cavebatsofware-site-template
+ *  Copyright (C) 2025 Grant DeFayette & Cavebatsoftware LLC
+ *
+ *  cavebatsofware-site-template is free software: you can redistribute it and/or modify
+ *  it under the terms of either the GNU General Public License as published by
+ *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
+ *  the 3 clause BSD License (BSD-3-Clause).
+ *  
+ *  If you wish to use this software under the GPL-3.0-only license, remove
+ *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *  
+ *  If you wish to use this software under the BSD-3-Clause license, remove
+ *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
+ *  unless you would like to dual-license your modifications to the software.
+ *
+ *  cavebatsofware-site-template is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License and BSD 3 Clause License
+ *  along with cavebatsofware-site-template.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
+ *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
+ */
+
+use crate::errors::AppError;
+use std::io::{Cursor, Read, Write};
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+
+/// Process a DOCX template by replacing {{ACCESS_CODE}} placeholder with actual access code
+/// DOCX is a ZIP file containing XML files. We need to:
+/// 1. Unzip the DOCX
+/// 2. Find and replace {{ACCESS_CODE}} in word/_rels/document.xml.rels
+/// 3. Re-zip everything back into a DOCX
+pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec<u8>, AppError> {
+    // Open the DOCX as a ZIP archive
+    let cursor = Cursor::new(docx_bytes);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| AppError::AuthError(format!("Failed to open DOCX as ZIP archive: {}", e)))?;
+
+    // Create a new ZIP archive for the output
+    let output_cursor = Cursor::new(Vec::new());
+    let mut zip_writer = ZipWriter::new(output_cursor);
+
+    // Iterate through all files in the ZIP
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| {
+            AppError::AuthError(format!("Failed to read file from DOCX archive: {}", e))
+        })?;
+
+        let file_name = file.name().to_string();
+        let is_target_file = file_name == "word/_rels/document.xml.rels";
+
+        // Read file contents
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents).map_err(|e| {
+            AppError::AuthError(format!(
+                "Failed to read file '{}' from DOCX: {}",
+                file_name, e
+            ))
+        })?;
+
+        // If this is the relationships file, perform substitution
+        let processed_contents = if is_target_file {
+            let xml_string = String::from_utf8(contents.clone()).map_err(|e| {
+                AppError::AuthError(format!("Invalid UTF-8 in DOCX file '{}': {}", file_name, e))
+            })?;
+
+            let processed_xml = xml_string.replace("{{ACCESS_CODE}}", access_code);
+            processed_xml.into_bytes()
+        } else {
+            contents
+        };
+
+        // Write the file to the new archive
+        let options = SimpleFileOptions::default()
+            .compression_method(file.compression())
+            .unix_permissions(file.unix_mode().unwrap_or(0o644));
+
+        zip_writer
+            .start_file(file_name.clone(), options)
+            .map_err(|e| {
+                AppError::AuthError(format!(
+                    "Failed to start file '{}' in output DOCX: {}",
+                    file_name, e
+                ))
+            })?;
+
+        zip_writer.write_all(&processed_contents).map_err(|e| {
+            AppError::AuthError(format!(
+                "Failed to write file '{}' to output DOCX: {}",
+                file_name, e
+            ))
+        })?;
+    }
+
+    // Finalize the ZIP archive
+    let output_cursor = zip_writer
+        .finish()
+        .map_err(|e| AppError::AuthError(format!("Failed to finalize output DOCX: {}", e)))?;
+
+    Ok(output_cursor.into_inner())
+}
