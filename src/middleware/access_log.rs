@@ -24,7 +24,7 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
-use crate::{app::AppState, middleware::AdminUserInfo};
+use crate::{app::AppState, middleware::AdminUserInfo, security_callbacks::AccessLogEvent};
 use axum::{
     extract::State,
     http::{Request, StatusCode},
@@ -86,16 +86,16 @@ pub async fn access_log_middleware(
 
         if let Err(e) = state
             .callbacks
-            .log_access_attempt(
-                ip_addr,
-                Some(security_context.user_agent.clone()),
-                &format!("{}:{}", method, path),
-                &action,
+            .log_access_attempt(AccessLogEvent {
+                ip: ip_addr,
+                user_agent: Some(security_context.user_agent.clone()),
+                access_code: format!("{}:{}", method, path),
+                action,
                 success,
                 tokens,
                 admin_user_id,
                 admin_user_email,
-            )
+            })
             .await
         {
             tracing::error!("Failed to log access attempt: {}", e);

@@ -249,7 +249,7 @@ struct CsrfTokenResponse {
 async fn get_csrf_token(session: Session) -> AppResult<Json<CsrfTokenResponse>> {
     let token = get_or_create_token(&session)
         .await
-        .map_err(|e| AppError::AuthError(e))?;
+        .map_err(AppError::AuthError)?;
 
     Ok(Json(CsrfTokenResponse { token }))
 }

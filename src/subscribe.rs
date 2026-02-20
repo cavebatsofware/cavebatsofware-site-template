@@ -28,6 +28,7 @@ use crate::{
     email::EmailService,
     entities::{subscriber, Subscriber},
     errors::AppResult,
+    security_callbacks::AccessLogEvent,
 };
 use axum::{
     extract::{Query, State},
@@ -188,16 +189,16 @@ async fn subscribe(
                 Ok(_) => {
                     let _ = state
                         .callbacks
-                        .log_access_attempt(
-                            Some(ip_addr),
-                            Some(security_context.user_agent.clone()),
-                            &subscribe_key,
-                            "subscribe_submit",
-                            true,
-                            0.0, // Not rate-limited
-                            None,
-                            None,
-                        )
+                        .log_access_attempt(AccessLogEvent {
+                            ip: Some(ip_addr),
+                            user_agent: Some(security_context.user_agent.clone()),
+                            access_code: subscribe_key.clone(),
+                            action: "subscribe_submit".to_string(),
+                            success: true,
+                            tokens: 0.0, // Not rate-limited
+                            admin_user_id: None,
+                            admin_user_email: None,
+                        })
                         .await;
 
                     tracing::info!("New subscription created for {}", email);
@@ -215,16 +216,16 @@ async fn subscribe(
 
                     let _ = state
                         .callbacks
-                        .log_access_attempt(
-                            Some(ip_addr),
-                            Some(security_context.user_agent.clone()),
-                            &subscribe_key,
-                            "subscribe_submit",
-                            false,
-                            0.0, // Not rate-limited
-                            None,
-                            None,
-                        )
+                        .log_access_attempt(AccessLogEvent {
+                            ip: Some(ip_addr),
+                            user_agent: Some(security_context.user_agent.clone()),
+                            access_code: subscribe_key,
+                            action: "subscribe_submit".to_string(),
+                            success: false,
+                            tokens: 0.0, // Not rate-limited
+                            admin_user_id: None,
+                            admin_user_email: None,
+                        })
                         .await;
 
                     Ok((

@@ -127,7 +127,7 @@ pub async fn establish_test_connection() -> Result<DatabaseConnection, DbErr> {
 
 #[cfg(test)]
 fn get_test_database_url() -> String {
-    dotenvy::var("TEST_DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string())
+    dotenvy::var("TEST_DATABASE_URL").unwrap()
 }
 
 /// Close database connection gracefully

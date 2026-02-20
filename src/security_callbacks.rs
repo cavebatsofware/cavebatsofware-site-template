@@ -7,6 +7,17 @@ use uuid::Uuid;
 
 use crate::entities::{access_log, AccessLog};
 
+pub struct AccessLogEvent {
+    pub ip: Option<IpAddr>,
+    pub user_agent: Option<String>,
+    pub access_code: String,
+    pub action: String,
+    pub success: bool,
+    pub tokens: f64,
+    pub admin_user_id: Option<Uuid>,
+    pub admin_user_email: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct AppRateLimitCallbacks {
     db: DatabaseConnection,
@@ -27,47 +38,37 @@ impl AppRateLimitCallbacks {
         }
     }
 
-    pub async fn log_access_attempt(
-        &self,
-        ip: Option<IpAddr>,
-        user_agent: Option<String>,
-        access_code: &str,
-        action: &str,
-        success: bool,
-        tokens: f64,
-        admin_user_id: Option<Uuid>,
-        admin_user_email: Option<String>,
-    ) -> Result<()> {
+    pub async fn log_access_attempt(&self, event: AccessLogEvent) -> Result<()> {
         if !self.enable_logging {
             return Ok(());
         }
 
-        if success && !self.log_successful_attempts {
+        if event.success && !self.log_successful_attempts {
             return Ok(());
         }
 
         tracing::debug!(
             "Logging access: ip={:?} action={} code={} success={}",
-            ip,
-            action,
-            access_code,
-            success
+            event.ip,
+            event.action,
+            event.access_code,
+            event.success
         );
 
         let now = Utc::now();
 
         let model = access_log::ActiveModel {
             id: Set(Uuid::new_v4()),
-            access_code: Set(access_code.to_string()),
-            ip_address: Set(ip.map(|ip| ip.to_string())),
-            user_agent: Set(user_agent),
-            tokens: Set(Some(tokens)),
+            access_code: Set(event.access_code.clone()),
+            ip_address: Set(event.ip.map(|ip| ip.to_string())),
+            user_agent: Set(event.user_agent),
+            tokens: Set(Some(event.tokens)),
             last_access_time: Set(None),
             last_delta_access: Set(None),
-            action: Set(action.to_string()),
-            success: Set(success),
-            admin_user_id: Set(admin_user_id),
-            admin_user_email: Set(admin_user_email),
+            action: Set(event.action),
+            success: Set(event.success),
+            admin_user_id: Set(event.admin_user_id),
+            admin_user_email: Set(event.admin_user_email),
             created_at: Set(now.into()),
         };
 
@@ -75,8 +76,8 @@ impl AppRateLimitCallbacks {
         if let Err(e) = access_log::Entity::insert(model).exec(&self.db).await {
             tracing::error!(
                 "Failed to insert access log for {:?} on {}: {}",
-                ip,
-                access_code,
+                event.ip,
+                event.access_code,
                 e
             );
         }
@@ -157,16 +158,16 @@ impl OnBlocked for AppRateLimitCallbacks {
         let rate_limit_key = format!("{}:{}", ip, path);
 
         if let Err(e) = self
-            .log_access_attempt(
-                ip_addr,
-                Some(_context.user_agent.clone()),
-                &rate_limit_key,
-                "rate_limited_blocked",
-                false,
-                0.0, // Already blocked, no tokens remaining
-                None,
-                None,
-            )
+            .log_access_attempt(AccessLogEvent {
+                ip: ip_addr,
+                user_agent: Some(_context.user_agent.clone()),
+                access_code: rate_limit_key,
+                action: "rate_limited_blocked".to_string(),
+                success: false,
+                tokens: 0.0, // Already blocked, no tokens remaining
+                admin_user_id: None,
+                admin_user_email: None,
+            })
             .await
         {
             // Log the error but don't propagate it - we don't want database issues
