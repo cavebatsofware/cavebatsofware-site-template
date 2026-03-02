@@ -41,11 +41,29 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authConfig, setAuthConfig] = useState({ oidcEnabled: false, loginUrl: null, accountUrl: null });
   const navigate = useNavigate();
 
   useEffect(() => {
     checkAuth();
+    fetchAuthConfig();
   }, []);
+
+  async function fetchAuthConfig() {
+    try {
+      const response = await fetchApi('/api/admin/auth-config');
+      if (response.ok) {
+        const data = await response.json();
+        setAuthConfig({
+          oidcEnabled: data.oidc_enabled,
+          loginUrl: data.login_url,
+          accountUrl: data.account_url,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch auth config:', error);
+    }
+  }
 
   async function checkAuth() {
     try {
@@ -146,6 +164,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     loading,
+    authConfig,
     login,
     register,
     logout,

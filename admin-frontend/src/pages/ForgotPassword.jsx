@@ -26,10 +26,12 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { fetchApi } from "../utils/api";
 import "./ForgotPassword.css";
 
 function ForgotPassword() {
+  const { authConfig } = useAuth();
   const [step, setStep] = useState("email"); // "email" | "mfa" | "success"
   const [email, setEmail] = useState("");
   const [mfaCode, setMfaCode] = useState("");
@@ -86,6 +88,25 @@ function ForgotPassword() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (authConfig.oidcEnabled) {
+    return (
+      <div className="forgot-password-page">
+        <div className="forgot-password-container">
+          <div className="forgot-password-card">
+            <div className="forgot-password-header">
+              <h1>Reset Password</h1>
+              <p>Password management is handled through Single Sign-On (SSO).</p>
+              <p>Please use your SSO provider to reset your password.</p>
+            </div>
+            <div className="forgot-password-footer">
+              <Link to="/login">Back to Login</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

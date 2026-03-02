@@ -26,11 +26,13 @@
 
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import { fetchApi } from "../utils/api";
 import PasswordChangeForm from "../components/PasswordChangeForm";
 import "./ResetPassword.css";
 
 function ResetPassword() {
+  const { authConfig } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -70,6 +72,24 @@ function ResetPassword() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (authConfig.oidcEnabled) {
+    return (
+      <div className="reset-password-page">
+        <div className="reset-password-container">
+          <div className="reset-password-card">
+            <div className="reset-password-header">
+              <h1>Set New Password</h1>
+              <p>Password management is handled through Single Sign-On (SSO).</p>
+            </div>
+            <div className="reset-password-footer">
+              <Link to="/login">Back to Login</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

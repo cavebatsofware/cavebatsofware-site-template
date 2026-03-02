@@ -42,7 +42,7 @@ import Profile from "./pages/Profile";
 import "./App.css";
 
 function ProtectedRoute({ children, allowForcePasswordChange = false }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
 
   if (loading) {
     return <div className="loading">Loading...</div>;
@@ -61,6 +61,25 @@ function ProtectedRoute({ children, allowForcePasswordChange = false }) {
   // Unless we're already on that page (allowForcePasswordChange=true)
   if (user.force_password_change && !allowForcePasswordChange) {
     return <Navigate to="/force-password-change" replace />;
+  }
+
+  // If user does not have the administrator role, show unauthorized page
+  if (user.role && user.role !== "administrator") {
+    return (
+      <div className="container">
+        <div className="card">
+          <h1>Access Denied</h1>
+          <p>
+            You are signed in as <strong>{user.email}</strong>, but your account
+            does not have the administrator role required to access this panel.
+          </p>
+          <p>Please contact your administrator to request access.</p>
+          <button className="btn" onClick={logout}>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return children;

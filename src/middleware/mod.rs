@@ -30,7 +30,7 @@ pub mod access_log;
 pub mod admin_auth;
 
 pub use access_log::access_log_middleware;
-pub use admin_auth::{require_admin_auth, AuthenticatedUser};
+pub use admin_auth::{require_admin_auth, require_administrator, AuthenticatedUser};
 
 /// Minimal admin user info for access logging. Only stores what's needed for audit trail.
 /// Uuid is Copy (16 bytes), email is the only heap allocation.

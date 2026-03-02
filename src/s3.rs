@@ -36,10 +36,36 @@ pub struct S3Service {
 
 impl S3Service {
     pub async fn new() -> Result<Self> {
-        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .load()
             .await;
-        let client = Client::new(&config);
+
+        let mut s3_config = aws_sdk_s3::config::Builder::from(&aws_config);
+
+        if let Ok(endpoint_url) = env::var("S3_ENDPOINT_URL") {
+            if !endpoint_url.is_empty() {
+                tracing::info!("Using custom S3 endpoint: {}", endpoint_url);
+                s3_config = s3_config.endpoint_url(&endpoint_url);
+            }
+        }
+
+        if let Ok(region) = env::var("S3_REGION") {
+            if !region.is_empty() {
+                tracing::info!("Using custom S3 region: {}", region);
+                s3_config = s3_config.region(aws_sdk_s3::config::Region::new(region));
+            }
+        }
+
+        if env::var("S3_FORCE_PATH_STYLE")
+            .unwrap_or_default()
+            .to_lowercase()
+            == "true"
+        {
+            tracing::info!("Using path-style S3 addressing");
+            s3_config = s3_config.force_path_style(true);
+        }
+
+        let client = Client::from_conf(s3_config.build());
         let bucket_name = env::var("S3_BUCKET_NAME")
             .unwrap_or_else(|_| "cavebatsofware-site-template-documents".to_string());
 

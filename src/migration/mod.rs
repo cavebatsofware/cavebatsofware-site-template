@@ -46,6 +46,7 @@ mod m20251130_000002_add_mfa_lockout_fields;
 mod m20251202_000001_add_user_management_fields;
 mod m20251202_000002_seed_site_settings;
 mod m20251202_000003_add_admin_user_to_access_log;
+mod m20260220_000001_add_role_to_admin_users;
 
 pub struct Migrator;
 
@@ -72,6 +73,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20251202_000001_add_user_management_fields::Migration),
             Box::new(m20251202_000002_seed_site_settings::Migration),
             Box::new(m20251202_000003_add_admin_user_to_access_log::Migration),
+            Box::new(m20260220_000001_add_role_to_admin_users::Migration),
         ]
     }
 }

@@ -24,7 +24,7 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -33,10 +33,27 @@ function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { user, login } = useAuth();
+  const { user, login, authConfig } = useAuth();
+
+  useEffect(() => {
+    if (authConfig.oidcEnabled && !user) {
+      window.location.href = '/api/admin/oidc/login';
+    }
+  }, [authConfig.oidcEnabled, user]);
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (authConfig.oidcEnabled) {
+    return (
+      <div className="container">
+        <div className="card">
+          <h1>Admin Login</h1>
+          <p>Redirecting to SSO...</p>
+        </div>
+      </div>
+    );
   }
 
   async function handleSubmit(e) {

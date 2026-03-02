@@ -65,6 +65,7 @@ pub struct AdminUserAuth {
     pub mfa_verified: bool,
     pub active: bool,
     pub force_password_change: bool,
+    pub role: String,
 }
 
 impl AuthUser for AdminUserAuth {
@@ -139,6 +140,7 @@ impl AdminAuthBackend {
             force_password_change: Set(false),
             password_reset_token: Set(None),
             password_reset_token_expires_at: Set(None),
+            role: Set("administrator".to_string()),
         };
 
         let result = admin.insert(&self.db).await?;
@@ -606,6 +608,7 @@ impl AuthnBackend for AdminAuthBackend {
                 mfa_verified: !totp_enabled,
                 active: admin.active,
                 force_password_change: admin.force_password_change,
+                role: admin.role,
             }))
         }
     }
@@ -635,6 +638,7 @@ impl AuthnBackend for AdminAuthBackend {
                     mfa_verified: !totp_enabled,
                     active: a.active,
                     force_password_change: a.force_password_change,
+                    role: a.role,
                 }
             }))
         }

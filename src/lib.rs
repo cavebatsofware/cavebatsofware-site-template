@@ -38,6 +38,7 @@ pub mod entities;
 pub mod errors;
 pub mod middleware;
 pub mod migration;
+pub mod oidc;
 pub mod s3;
 pub mod security_callbacks;
 pub mod settings;

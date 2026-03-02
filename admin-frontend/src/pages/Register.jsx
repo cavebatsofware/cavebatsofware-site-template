@@ -35,12 +35,27 @@ function Register() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { user, register } = useAuth();
+  const { user, register, authConfig } = useAuth();
 
   const siteDomain = import.meta.env.VITE_SITE_DOMAIN;
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (authConfig.oidcEnabled) {
+    return (
+      <div className="container">
+        <div className="card">
+          <h1>Registration</h1>
+          <p>Account registration is managed through Single Sign-On (SSO).</p>
+          <p>Please contact your administrator to get access.</p>
+          <div className="link">
+            <Link to="/login">Back to Login</Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   async function handleSubmit(e) {

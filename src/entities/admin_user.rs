@@ -53,6 +53,8 @@ pub struct Model {
     pub force_password_change: bool,
     pub password_reset_token: Option<String>,
     pub password_reset_token_expires_at: Option<DateTimeWithTimeZone>,
+    // Role-based access control
+    pub role: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

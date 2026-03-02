@@ -37,7 +37,7 @@ use std::{env, sync::Arc};
 use time::Duration as TimeDuration;
 use tower::ServiceBuilder;
 use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::TraceLayer};
-use tower_sessions::{Expiry, SessionManagerLayer};
+use tower_sessions::{cookie::SameSite, Expiry, SessionManagerLayer};
 use tower_sessions_memory_store::MemoryStore;
 
 mod admin;
@@ -51,12 +51,13 @@ mod entities;
 mod errors;
 mod middleware;
 mod migration;
+mod oidc;
 mod s3;
 mod security_callbacks;
 mod settings;
 mod subscribe;
 
-use self::middleware::{access_log_middleware, csrf_middleware, require_admin_auth};
+use self::middleware::{access_log_middleware, csrf_middleware, require_admin_auth, require_administrator};
 use app::AppState;
 use basic_axum_rate_limit::{
     rate_limit_middleware, security_context_middleware_with_config, IpExtractionStrategy,
@@ -220,8 +221,11 @@ async fn main() -> anyhow::Result<()> {
     let session_store = MemoryStore::default();
 
     // Session expiry: 1 day of inactivity for better security
+    // SameSite::Lax is required for OIDC - the redirect back from the IdP is a
+    // cross-site top-level navigation, and Strict would drop the session cookie.
     let session_layer = SessionManagerLayer::new(session_store)
-        .with_expiry(Expiry::OnInactivity(TimeDuration::days(1)));
+        .with_expiry(Expiry::OnInactivity(TimeDuration::days(1)))
+        .with_same_site(SameSite::Lax);
 
     // Setup admin auth backend
     let admin_backend = admin::AdminAuthBackend::new(state.db.clone());
@@ -232,16 +236,41 @@ async fn main() -> anyhow::Result<()> {
     let email_service = Arc::new(email::EmailService::new(state.settings.clone()).await?);
 
     // Create admin state
+    let oidc_enabled = state.oidc.config.enabled;
+    let oidc_account_url = if oidc_enabled {
+        Some(format!(
+            "{}/account",
+            state.oidc.config.issuer_url.trim_end_matches('/')
+        ))
+    } else {
+        None
+    };
     let admin_state = admin::routes::AdminState {
         auth_backend: admin_backend.clone(),
         email_service: email_service.clone(),
         settings: state.settings.clone(),
+        oidc_enabled,
+        oidc_account_url,
     };
 
     // Build admin routes (pass auth rate limiter for sensitive routes)
     let admin_routes = admin::routes::admin_api_routes(state.auth_rate_limiter.clone())
         .with_state(admin_state)
         .layer(from_fn(csrf_middleware))
+        .layer(auth_layer.clone());
+
+    // Build OIDC routes (login redirect and callback)
+    let oidc_state = admin::oidc_routes::OidcState {
+        oidc_service: state.oidc.clone(),
+        db: state.db.clone(),
+    };
+    let oidc_routes = Router::new()
+        .route("/api/admin/oidc/login", get(admin::oidc_routes::oidc_login))
+        .route(
+            "/api/admin/oidc/callback",
+            get(admin::oidc_routes::oidc_callback),
+        )
+        .with_state(oidc_state)
         .layer(auth_layer.clone());
 
     // Build access code management routes
@@ -251,6 +280,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let access_code_routes = admin::access_codes::access_code_routes()
         .with_state(access_code_state)
+        .layer(from_fn(require_administrator))
         .layer(from_fn(require_admin_auth))
         .layer(from_fn(csrf_middleware))
         .layer(auth_layer.clone());
@@ -261,6 +291,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let access_log_routes = admin::access_logs::access_log_routes()
         .with_state(access_log_state)
+        .layer(from_fn(require_administrator))
         .layer(from_fn(require_admin_auth))
         .layer(from_fn(csrf_middleware))
         .layer(auth_layer.clone());
@@ -273,6 +304,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let admin_user_routes = admin::admin_users::admin_user_routes()
         .with_state(admin_user_state)
+        .layer(from_fn(require_administrator))
         .layer(from_fn(require_admin_auth))
         .layer(from_fn(csrf_middleware))
         .layer(auth_layer.clone());
@@ -283,9 +315,10 @@ async fn main() -> anyhow::Result<()> {
     };
     let settings_routes = admin::settings::settings_routes()
         .with_state(settings_state)
+        .layer(from_fn(require_administrator))
         .layer(from_fn(require_admin_auth))
         .layer(from_fn(csrf_middleware))
-        .layer(auth_layer);
+        .layer(auth_layer.clone());
 
     let contact_state = contact::ContactState {
         email_service: email_service.clone(),
@@ -309,6 +342,7 @@ async fn main() -> anyhow::Result<()> {
     let mut app = Router::new()
         // API routes (highest priority)
         .merge(admin_routes)
+        .merge(oidc_routes)
         .merge(access_code_routes)
         .merge(access_log_routes)
         .merge(admin_user_routes)

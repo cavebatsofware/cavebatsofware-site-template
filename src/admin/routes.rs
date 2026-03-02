@@ -56,6 +56,8 @@ pub struct AdminState {
     pub auth_backend: AdminAuthBackend,
     pub email_service: Arc<EmailService>,
     pub settings: SettingsService,
+    pub oidc_enabled: bool,
+    pub oidc_account_url: Option<String>,
 }
 
 pub fn admin_api_routes(
@@ -80,6 +82,7 @@ pub fn admin_api_routes(
         .route("/api/admin/verify-email", get(verify_email))
         .route("/api/admin/me", get(me))
         .route("/api/admin/csrf-token", get(get_csrf_token))
+        .route("/api/admin/auth-config", get(auth_config))
         .route("/api/admin/change-password", post(change_password))
         .route("/api/admin/mfa/setup", post(mfa_setup))
         .route("/api/admin/mfa/confirm-setup", post(mfa_confirm_setup))
@@ -104,6 +107,8 @@ async fn register(
     State(state): State<AdminState>,
     Json(req): Json<RegisterRequest>,
 ) -> AppResult<Json<RegisterResponse>> {
+    require_local_auth(state.oidc_enabled)?;
+
     // Check if registration is enabled
     let registration_enabled = state
         .settings
@@ -139,9 +144,12 @@ async fn register(
 }
 
 async fn login(
+    State(state): State<AdminState>,
     mut auth_session: AdminAuthSession,
     Json(creds): Json<Credentials>,
 ) -> AppResult<Json<UserResponse>> {
+    require_local_auth(state.oidc_enabled)?;
+
     let user = auth_session
         .authenticate(creds)
         .await
@@ -164,6 +172,7 @@ async fn login(
         mfa_required,
         active: user.active,
         force_password_change: user.force_password_change,
+        role: user.role,
     }))
 }
 
@@ -212,6 +221,7 @@ struct UserResponse {
     mfa_required: bool,
     active: bool,
     force_password_change: bool,
+    role: String,
 }
 
 async fn me(auth_session: AdminAuthSession, session: Session) -> AppResult<Json<UserResponse>> {
@@ -237,6 +247,7 @@ async fn me(auth_session: AdminAuthSession, session: Session) -> AppResult<Json<
         mfa_required,
         active: user.active,
         force_password_change: user.force_password_change,
+        role: user.role,
     }))
 }
 
@@ -252,6 +263,40 @@ async fn get_csrf_token(session: Session) -> AppResult<Json<CsrfTokenResponse>> 
         .map_err(AppError::AuthError)?;
 
     Ok(Json(CsrfTokenResponse { token }))
+}
+
+// ==================== Auth Config Endpoint ====================
+
+#[derive(Serialize)]
+struct AuthConfigResponse {
+    oidc_enabled: bool,
+    login_url: Option<String>,
+    account_url: Option<String>,
+}
+
+/// Returns auth configuration so the frontend knows whether to use OIDC or local login
+async fn auth_config(State(state): State<AdminState>) -> Json<AuthConfigResponse> {
+    let login_url = if state.oidc_enabled {
+        Some("/api/admin/oidc/login".to_string())
+    } else {
+        None
+    };
+
+    Json(AuthConfigResponse {
+        oidc_enabled: state.oidc_enabled,
+        login_url,
+        account_url: state.oidc_account_url.clone(),
+    })
+}
+
+/// Guard that returns an error when OIDC is enabled, directing users to SSO
+fn require_local_auth(oidc_enabled: bool) -> AppResult<()> {
+    if oidc_enabled {
+        return Err(AppError::AuthError(
+            "Local authentication is disabled. Please use Single Sign-On (SSO).".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 // ==================== MFA Endpoints ====================
@@ -609,6 +654,8 @@ async fn forgot_password(
     State(state): State<AdminState>,
     Json(req): Json<ForgotPasswordRequest>,
 ) -> AppResult<Json<ForgotPasswordResponse>> {
+    require_local_auth(state.oidc_enabled)?;
+
     // Check if user exists (we'll handle this silently for enumeration protection)
     let admin = state
         .auth_backend
@@ -651,6 +698,8 @@ async fn forgot_password_verify_mfa(
     State(state): State<AdminState>,
     Json(req): Json<ForgotPasswordVerifyMfaRequest>,
 ) -> AppResult<Json<ForgotPasswordVerifyMfaResponse>> {
+    require_local_auth(state.oidc_enabled)?;
+
     // Get user by email
     let admin = state
         .auth_backend
@@ -736,6 +785,8 @@ async fn reset_password(
     State(state): State<AdminState>,
     Json(req): Json<ResetPasswordRequest>,
 ) -> AppResult<Json<ResetPasswordResponse>> {
+    require_local_auth(state.oidc_enabled)?;
+
     // Validate the token first to get the user email for password validation
     let admin = state
         .auth_backend

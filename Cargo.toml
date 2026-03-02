@@ -48,6 +48,10 @@ totp-rs = { version = "5.7", features = ["qr", "gen_secret"] }
 aes-gcm = { version = "0.10.3" }
 base64 = { version = "0.22.1" }
 lazy_static = { version = "1.5.0" }
+# OIDC for Keycloak SSO
+openidconnect = "4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+url = "2"
 
 
 [dev-dependencies]

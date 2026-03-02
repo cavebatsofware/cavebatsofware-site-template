@@ -14,6 +14,12 @@ ECR_REPOSITORY ?= $(if $(ECR_REPO_NAME),$(ECR_REPO_NAME),$(error ECR_REPO_NAME n
 ECR_REGION ?= us-east-2
 ECR_IMAGE := $(ECR_REGISTRY)/$(ECR_REPOSITORY):latest
 
+# OCI Container Registry (OCIR) Configuration (optional)
+OCIR_REGISTRY ?= $(OCIR_REGISTRY_URL)
+OCIR_REPOSITORY ?= $(OCIR_REPO_NAME)
+OCIR_REGION ?= $(if $(OCIR_REGION_NAME),$(OCIR_REGION_NAME),us-ashburn-1)
+OCIR_IMAGE = $(if $(OCIR_REGISTRY),$(OCIR_REGISTRY)/$(OCIR_REPOSITORY):latest,)
+
 # Default target
 .PHONY: help
 help:
@@ -55,6 +61,9 @@ help:
 	@echo "  make deploy         - Complete deployment: build + push to ECR"
 	@echo "  make push-ecr       - Push to ECR (after build)"
 	@echo "  make login-ecr      - Login to ECR"
+	@echo "  make deploy-ocir    - Complete deployment: build + push to OCIR"
+	@echo "  make push-ocir      - Push to OCIR (after build)"
+	@echo "  make login-ocir     - Login to OCIR"
 	@echo "  make clean          - Remove local Docker images"
 	@echo ""
 	@echo "📋 Configuration:"
@@ -105,6 +114,31 @@ deploy: build push-ecr
 	@echo "2. The vpn-server docker-compose will pull this image automatically"
 	@echo "3. Deploy infrastructure changes if needed via vpn-server project"
 
+# Login to OCI Container Registry (OCIR)
+.PHONY: login-ocir
+login-ocir:
+	@if [ -z "$(OCIR_REGISTRY)" ]; then echo "Error: OCIR_REGISTRY_URL not set"; exit 1; fi
+	@if [ -z "$(OCIR_USERNAME)" ]; then echo "Error: OCIR_USERNAME not set"; exit 1; fi
+	@echo "Logging into OCIR..."
+	@echo "$(OCIR_AUTH_TOKEN)" | docker login $(OCIR_REGISTRY) -u '$(OCIR_USERNAME)' --password-stdin
+	@echo "OCIR login successful"
+
+# Tag and push to OCIR
+.PHONY: push-ocir
+push-ocir: login-ocir
+	@echo "Tagging image for OCIR..."
+	docker tag $(DOCKER_IMAGE):latest $(OCIR_IMAGE)
+	@echo "Pushing to OCIR..."
+	docker push $(OCIR_IMAGE)
+	@echo "Push complete: $(OCIR_IMAGE)"
+
+# Complete OCIR deployment (build + push)
+.PHONY: deploy-ocir
+deploy-ocir: build push-ocir
+	@echo ""
+	@echo "OCIR Deployment complete!"
+	@echo "Image pushed to: $(OCIR_IMAGE)"
+
 # Run locally for testing
 .PHONY: run
 run:
@@ -120,6 +154,7 @@ clean:
 	@echo "🧹 Cleaning up..."
 	-docker rmi $(DOCKER_IMAGE):latest
 	-docker rmi $(ECR_IMAGE)
+	-if [ -n "$(OCIR_IMAGE)" ]; then docker rmi $(OCIR_IMAGE) 2>/dev/null; fi
 	cargo clean
 	@echo "✅ Cleanup complete"
 
@@ -141,6 +176,12 @@ show-config:
 	@echo "  ECR Repository: $(if $(ECR_REPO_NAME),$(ECR_REPO_NAME),❌ Not set)"
 	@echo "  ECR Region: $(ECR_REGION)"
 	@echo "  Full ECR Image: $(if $(ECR_REGISTRY_URL),$(if $(ECR_REPO_NAME),$(ECR_IMAGE),❌ Missing repo name),❌ Missing registry)"
+	@echo ""
+	@echo "  OCIR Registry: $(if $(OCIR_REGISTRY_URL),$(OCIR_REGISTRY_URL),Not set)"
+	@echo "  OCIR Repository: $(if $(OCIR_REPO_NAME),$(OCIR_REPO_NAME),Not set)"
+	@echo "  OCIR Region: $(OCIR_REGION)"
+	@echo "  Full OCIR Image: $(if $(OCIR_REGISTRY_URL),$(if $(OCIR_REPO_NAME),$(OCIR_IMAGE),Not set),Not set)"
+	@echo ""
 	@echo "  Database URL: $(if $(DATABASE_URL),✅ Set,❌ Not set)"
 	@echo "  Access Codes: $(if $(ACCESS_CODES),✅ Set,❌ Not set)"
 

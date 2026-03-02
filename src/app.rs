@@ -25,6 +25,7 @@
  */
 
 use crate::entities::{access_code, AccessCode};
+use crate::oidc::{OidcConfig, OidcService};
 use crate::s3::S3Service;
 use crate::security_callbacks::AppRateLimitCallbacks;
 use crate::settings::SettingsService;
@@ -42,6 +43,7 @@ pub struct AppState {
     pub callbacks: AppRateLimitCallbacks,
     pub settings: SettingsService,
     pub s3: S3Service,
+    pub oidc: OidcService,
     pub enable_logging: bool,
     pub log_successful_attempts: bool,
 }
@@ -164,6 +166,9 @@ impl AppState {
         let settings = SettingsService::new(db.clone());
         let s3 = S3Service::new().await?;
 
+        let oidc_config = OidcConfig::from_env();
+        let oidc = OidcService::new(oidc_config).await?;
+
         tracing::info!("Database connected and services initialized");
         tracing::info!(
             "Rate limit config: {}/min, block_duration={}min, logging_enabled={}, log_successful={}",
@@ -185,6 +190,7 @@ impl AppState {
             callbacks,
             settings,
             s3,
+            oidc,
             enable_logging,
             log_successful_attempts,
         })

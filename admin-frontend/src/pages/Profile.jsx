@@ -32,7 +32,7 @@ import { fetchApi } from "../utils/api";
 import "./Profile.css";
 
 function Profile() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, authConfig } = useAuth();
   const [mfaSetupData, setMfaSetupData] = useState(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
@@ -190,169 +190,192 @@ function Profile() {
           </div>
         </section>
 
-        <section className="profile-section">
-          <h2>Change Password</h2>
-          <div className="profile-card">
-            <PasswordChangeForm
-              requireCurrentPassword={true}
-              onSubmit={handlePasswordChange}
-              loading={passwordLoading}
-              email={user?.email}
-            />
-          </div>
-        </section>
-
-        <section className="profile-section">
-          <h2>Two-Factor Authentication</h2>
-          <div className="profile-card">
-            <div className="mfa-status">
-              <div className="mfa-status-info">
-                <div className="mfa-status-label">Status</div>
-                <div className="mfa-status-value">
-                  {user?.totp_enabled ? (
-                    <span className="badge badge-success">Enabled</span>
-                  ) : (
-                    <span className="badge badge-gray">Disabled</span>
-                  )}
-                </div>
-                <p className="mfa-description">
-                  Two-factor authentication adds an extra layer of security to
-                  your account by requiring a code from your authenticator app
-                  when signing in.
-                </p>
-              </div>
-
-              {!user?.totp_enabled && !mfaSetupData && (
-                <button
+        {authConfig.oidcEnabled ? (
+          <section className="profile-section">
+            <h2>Account Management</h2>
+            <div className="profile-card">
+              <p>
+                Your password and security settings are managed through Single Sign-On (SSO).
+              </p>
+              {authConfig.accountUrl && (
+                <a
+                  href={authConfig.accountUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="btn-primary"
-                  onClick={startMfaSetup}
-                  disabled={loading}
                 >
-                  {loading ? "Setting up..." : "Enable MFA"}
-                </button>
-              )}
-
-              {user?.totp_enabled && !showDisableConfirm && (
-                <button
-                  className="btn-danger"
-                  onClick={() => setShowDisableConfirm(true)}
-                  disabled={loading}
-                >
-                  Disable MFA
-                </button>
+                  Manage Account in Keycloak
+                </a>
               )}
             </div>
+          </section>
+        ) : (
+          <>
+            <section className="profile-section">
+              <h2>Change Password</h2>
+              <div className="profile-card">
+                <PasswordChangeForm
+                  requireCurrentPassword={true}
+                  onSubmit={handlePasswordChange}
+                  loading={passwordLoading}
+                  email={user?.email}
+                />
+              </div>
+            </section>
 
-            {mfaSetupData && (
-              <div className="mfa-setup">
-                <h3>Set Up Authenticator App</h3>
-                <p>
-                  Scan the QR code below with your authenticator app (such as
-                  Google Authenticator, Authy, or 1Password).
-                </p>
-
-                <div className="qr-code-container">
-                  <img
-                    src={`data:image/png;base64,${mfaSetupData.qr_code}`}
-                    alt="MFA QR Code"
-                    className="qr-code"
-                  />
-                </div>
-
-                <div className="manual-entry">
-                  <p>
-                    Or enter this code manually in your authenticator app:
-                  </p>
-                  <code className="secret-code">{mfaSetupData.secret}</code>
-                </div>
-
-                <form onSubmit={confirmMfaSetup} className="verify-form">
-                  <div className="form-group">
-                    <label htmlFor="verification-code">
-                      Enter the 6-digit code from your app
-                    </label>
-                    <input
-                      id="verification-code"
-                      type="text"
-                      value={verificationCode}
-                      onChange={(e) =>
-                        setVerificationCode(e.target.value.replace(/\D/g, ""))
-                      }
-                      maxLength={6}
-                      placeholder="000000"
-                      className="verification-input"
-                      autoComplete="one-time-code"
-                    />
+            <section className="profile-section">
+              <h2>Two-Factor Authentication</h2>
+              <div className="profile-card">
+                <div className="mfa-status">
+                  <div className="mfa-status-info">
+                    <div className="mfa-status-label">Status</div>
+                    <div className="mfa-status-value">
+                      {user?.totp_enabled ? (
+                        <span className="badge badge-success">Enabled</span>
+                      ) : (
+                        <span className="badge badge-gray">Disabled</span>
+                      )}
+                    </div>
+                    <p className="mfa-description">
+                      Two-factor authentication adds an extra layer of security to
+                      your account by requiring a code from your authenticator app
+                      when signing in.
+                    </p>
                   </div>
-                  <div className="form-actions">
+
+                  {!user?.totp_enabled && !mfaSetupData && (
                     <button
-                      type="submit"
                       className="btn-primary"
-                      disabled={loading || verificationCode.length !== 6}
-                    >
-                      {loading ? "Verifying..." : "Verify & Enable"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={cancelSetup}
+                      onClick={startMfaSetup}
                       disabled={loading}
                     >
-                      Cancel
+                      {loading ? "Setting up..." : "Enable MFA"}
                     </button>
-                  </div>
-                </form>
-              </div>
-            )}
+                  )}
 
-            {showDisableConfirm && (
-              <div className="mfa-disable">
-                <h3>Disable Two-Factor Authentication</h3>
-                <p className="warning-text">
-                  Disabling MFA will make your account less secure. You will
-                  need to enter your password to confirm.
-                </p>
-
-                <form onSubmit={disableMfa} className="disable-form">
-                  <div className="form-group">
-                    <label htmlFor="disable-password">
-                      Enter your password to confirm
-                    </label>
-                    <input
-                      id="disable-password"
-                      type="password"
-                      value={disablePassword}
-                      onChange={(e) => setDisablePassword(e.target.value)}
-                      placeholder="Your password"
-                      autoComplete="current-password"
-                    />
-                  </div>
-                  <div className="form-actions">
+                  {user?.totp_enabled && !showDisableConfirm && (
                     <button
-                      type="submit"
                       className="btn-danger"
-                      disabled={loading || !disablePassword}
-                    >
-                      {loading ? "Disabling..." : "Disable MFA"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setShowDisableConfirm(false);
-                        setDisablePassword("");
-                        setError("");
-                      }}
+                      onClick={() => setShowDisableConfirm(true)}
                       disabled={loading}
                     >
-                      Cancel
+                      Disable MFA
                     </button>
+                  )}
+                </div>
+
+                {mfaSetupData && (
+                  <div className="mfa-setup">
+                    <h3>Set Up Authenticator App</h3>
+                    <p>
+                      Scan the QR code below with your authenticator app (such as
+                      Google Authenticator, Authy, or 1Password).
+                    </p>
+
+                    <div className="qr-code-container">
+                      <img
+                        src={`data:image/png;base64,${mfaSetupData.qr_code}`}
+                        alt="MFA QR Code"
+                        className="qr-code"
+                      />
+                    </div>
+
+                    <div className="manual-entry">
+                      <p>
+                        Or enter this code manually in your authenticator app:
+                      </p>
+                      <code className="secret-code">{mfaSetupData.secret}</code>
+                    </div>
+
+                    <form onSubmit={confirmMfaSetup} className="verify-form">
+                      <div className="form-group">
+                        <label htmlFor="verification-code">
+                          Enter the 6-digit code from your app
+                        </label>
+                        <input
+                          id="verification-code"
+                          type="text"
+                          value={verificationCode}
+                          onChange={(e) =>
+                            setVerificationCode(e.target.value.replace(/\D/g, ""))
+                          }
+                          maxLength={6}
+                          placeholder="000000"
+                          className="verification-input"
+                          autoComplete="one-time-code"
+                        />
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          type="submit"
+                          className="btn-primary"
+                          disabled={loading || verificationCode.length !== 6}
+                        >
+                          {loading ? "Verifying..." : "Verify & Enable"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={cancelSetup}
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
                   </div>
-                </form>
+                )}
+
+                {showDisableConfirm && (
+                  <div className="mfa-disable">
+                    <h3>Disable Two-Factor Authentication</h3>
+                    <p className="warning-text">
+                      Disabling MFA will make your account less secure. You will
+                      need to enter your password to confirm.
+                    </p>
+
+                    <form onSubmit={disableMfa} className="disable-form">
+                      <div className="form-group">
+                        <label htmlFor="disable-password">
+                          Enter your password to confirm
+                        </label>
+                        <input
+                          id="disable-password"
+                          type="password"
+                          value={disablePassword}
+                          onChange={(e) => setDisablePassword(e.target.value)}
+                          placeholder="Your password"
+                          autoComplete="current-password"
+                        />
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          type="submit"
+                          className="btn-danger"
+                          disabled={loading || !disablePassword}
+                        >
+                          {loading ? "Disabling..." : "Disable MFA"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => {
+                            setShowDisableConfirm(false);
+                            setDisablePassword("");
+                            setError("");
+                          }}
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </div>
     </Layout>
   );

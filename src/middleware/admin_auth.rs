@@ -96,6 +96,30 @@ pub async fn require_admin_auth(
     }
 }
 
+pub const ROLE_ADMINISTRATOR: &str = "administrator";
+
+/// Middleware that checks if the authenticated user has the administrator role.
+/// Must be applied AFTER require_admin_auth (which inserts the user into extensions).
+pub async fn require_administrator(request: Request<Body>, next: Next) -> Response {
+    let user = request.extensions().get::<AdminUserAuth>();
+
+    match user {
+        Some(user) if user.role == ROLE_ADMINISTRATOR => next.run(request).await,
+        Some(user) => {
+            tracing::warn!(
+                "Access denied for user {} with role '{}': administrator required",
+                user.email,
+                user.role
+            );
+            (StatusCode::FORBIDDEN, "Insufficient permissions").into_response()
+        }
+        None => {
+            tracing::error!("require_administrator called without require_admin_auth");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+        }
+    }
+}
+
 /// Extension type for accessing authenticated admin user in handlers
 /// Usage in handlers:
 /// ```ignore

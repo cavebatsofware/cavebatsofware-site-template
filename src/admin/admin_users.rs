@@ -76,6 +76,7 @@ pub struct AdminUserResponse {
     active: bool,
     deactivated_at: Option<String>,
     force_password_change: bool,
+    role: String,
     created_at: String,
     updated_at: String,
 }
@@ -100,6 +101,7 @@ impl From<admin_user::Model> for AdminUserResponse {
                 .deactivated_at
                 .map(|t| t.with_timezone(&Utc).to_rfc3339()),
             force_password_change: model.force_password_change,
+            role: model.role,
             created_at: model.created_at.with_timezone(&Utc).to_rfc3339(),
             updated_at: model.updated_at.with_timezone(&Utc).to_rfc3339(),
         }
@@ -113,6 +115,7 @@ pub struct UpdateAdminUserRequest {
     disable_mfa: Option<bool>,
     active: Option<bool>,
     new_password: Option<String>,
+    role: Option<String>,
 }
 
 async fn list_admin_users(
@@ -253,6 +256,17 @@ async fn update_admin_user(
         admin_active.totp_enabled_at = Set(None);
         admin_active.mfa_failed_attempts = Set(Some(0));
         admin_active.mfa_locked_until = Set(None);
+    }
+
+    if let Some(ref role) = req.role {
+        let valid_roles = ["administrator", "viewer"];
+        if !valid_roles.contains(&role.as_str()) {
+            return Err(AppError::ValidationError(format!(
+                "Invalid role '{}'. Valid roles: {:?}",
+                role, valid_roles
+            )));
+        }
+        admin_active.role = Set(role.clone());
     }
 
     admin_active.updated_at = Set(Utc::now().into());
