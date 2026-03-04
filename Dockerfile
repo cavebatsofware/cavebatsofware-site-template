@@ -1,5 +1,5 @@
 # Frontend build stage (admin only - public frontend is pre-built by Makefile)
-FROM node:22-alpine AS frontend-builder
+FROM node:25.7-alpine3.23 AS frontend-builder
 
 WORKDIR /app
 
@@ -32,16 +32,11 @@ COPY crates ./crates
 # Copy source code
 COPY src ./src
 
-# Build the release binary (with loadtest feature for load testing builds)
-ARG BUILD_FEATURES=""
-RUN if [ -n "$BUILD_FEATURES" ]; then \
-    cargo build --release --features "$BUILD_FEATURES"; \
-    else \
-    cargo build --release; \
-    fi
+# Build the release binary
+RUN cargo build --release
 
 # Runtime stage
-FROM alpine:3.22.2
+FROM alpine:3.23
 
 WORKDIR /app
 
@@ -53,9 +48,6 @@ COPY --from=builder /app/target/release/cavebatsofware-site-template ./cavebatso
 
 # Copy built admin frontend from frontend-builder stage
 COPY --from=frontend-builder /app/admin-assets ./admin-assets
-
-# Copy pre-built public frontend (built by Makefile before docker build)
-COPY public-assets ./public-assets
 
 # Copy static assets
 COPY assets ./assets

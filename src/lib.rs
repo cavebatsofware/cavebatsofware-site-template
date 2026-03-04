@@ -36,6 +36,7 @@ pub mod docx;
 pub mod email;
 pub mod entities;
 pub mod errors;
+pub mod metrics;
 pub mod middleware;
 pub mod migration;
 pub mod oidc;

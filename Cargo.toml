@@ -5,7 +5,6 @@ edition = "2021"
 
 [features]
 default = []
-loadtest = ["basic-axum-rate-limit/metrics"]
 
 [dependencies]
 basic-axum-rate-limit = "0.2.2"
@@ -33,7 +32,8 @@ async-trait = "0.1.89"
 # Admin authentication dependencies
 axum-login = "0.18"
 tower-sessions = "0.14"
-tower-sessions-memory-store = "0.14"
+tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres"] }
 # AWS services
 aws-config = "1.8.12"
 aws-sdk-sesv2 = "1.109.0"
@@ -48,6 +48,8 @@ totp-rs = { version = "5.7", features = ["qr", "gen_secret"] }
 aes-gcm = { version = "0.10.3" }
 base64 = { version = "0.22.1" }
 lazy_static = { version = "1.5.0" }
+# Prometheus metrics
+prometheus = "0.14"
 # OIDC for Keycloak SSO
 openidconnect = "4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

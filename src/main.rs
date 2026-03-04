@@ -37,8 +37,8 @@ use std::{env, sync::Arc};
 use time::Duration as TimeDuration;
 use tower::ServiceBuilder;
 use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::TraceLayer};
-use tower_sessions::{cookie::SameSite, Expiry, SessionManagerLayer};
-use tower_sessions_memory_store::MemoryStore;
+use tower_sessions::{cookie::SameSite, ExpiredDeletion, Expiry, SessionManagerLayer};
+use tower_sessions_sqlx_store::PostgresStore;
 
 mod admin;
 mod app;
@@ -49,6 +49,7 @@ mod docx;
 mod email;
 mod entities;
 mod errors;
+mod metrics;
 mod middleware;
 mod migration;
 mod oidc;
@@ -213,12 +214,29 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Register prometheus metrics
+    metrics::register_metrics();
+
     // Create shared app state with database connection
     let state = AppState::new().await?;
 
-    // Setup session store for admin authentication
-    // Use in-memory store - sessions will be lost on restart but that's fine for a personal site
-    let session_store = MemoryStore::default();
+    // Setup PostgreSQL-backed session store for admin authentication
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let session_pool = sqlx::PgPool::connect(&database_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("Session store pool connection failed: {}", e))?;
+    let session_store = PostgresStore::new(session_pool);
+    session_store
+        .migrate()
+        .await
+        .map_err(|e| anyhow::anyhow!("Session table migration failed: {}", e))?;
+
+    // Spawn background task to clean up expired sessions
+    let _deletion_task = tokio::task::spawn(
+        session_store
+            .clone()
+            .continuously_delete_expired(std::time::Duration::from_secs(60)),
+    );
 
     // Session expiry: 1 day of inactivity for better security
     // SameSite::Lax is required for OIDC - the redirect back from the IdP is a
@@ -338,8 +356,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(from_fn(csrf_middleware));
 
     // Build the application with routes and middleware stack
-    #[allow(unused_mut)]
-    let mut app = Router::new()
+    let app = Router::new()
         // API routes (highest priority)
         .merge(admin_routes)
         .merge(oidc_routes)
@@ -354,6 +371,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/favicon.svg", get(serve_favicon_svg))
         .route("/robots.txt", get(serve_robots))
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics::metrics_handler))
         .route("/access/{code}", get(serve_access))
         .route("/access/{code}/download", get(download_access))
         .route("/document/{code}", get(serve_access))
@@ -390,12 +408,6 @@ async fn main() -> anyhow::Result<()> {
                 .service(ServeDir::new("./public-assets").precompressed_gzip()),
         )
         .with_state(state.clone());
-
-    // Metrics endpoint (only for load testing)
-    #[cfg(feature = "loadtest")]
-    {
-        app = app.route("/metrics", get(basic_axum_rate_limit::metrics_handler));
-    }
 
     // Configure IP extraction strategy based on environment
     // DEV_MODE=true uses socket address (direct connections without proxy)
@@ -434,18 +446,18 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Metrics update task (only for load testing)
-    #[cfg(feature = "loadtest")]
-    {
-        let metrics_limiter = state.rate_limiter.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-            loop {
-                interval.tick().await;
-                metrics_limiter.update_metrics();
-            }
-        });
-    }
+    // Metrics refresh task - updates system-level gauges periodically
+    let metrics_limiter = state.rate_limiter.clone();
+    let metrics_auth_limiter = state.auth_rate_limiter.clone();
+    let metrics_db = state.db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        loop {
+            interval.tick().await;
+            metrics::refresh_system_metrics(&metrics_limiter, &metrics_auth_limiter, &metrics_db)
+                .await;
+        }
+    });
 
     let db_cleanup_callbacks = state.callbacks.clone();
     let retention_days = env::var("ACCESS_LOG_RETENTION_DAYS")

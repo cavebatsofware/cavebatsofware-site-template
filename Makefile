@@ -41,14 +41,6 @@ help:
 	@echo "  make test-db-down   - Stop test database"
 	@echo "  make test-db-reset  - Reset test database"
 	@echo ""
-	@echo "📊 Load Test Commands:"
-	@echo "  make loadtest-build - Build loadtest environment (app + generator)"
-	@echo "  make loadtest-start - Start loadtest infrastructure"
-	@echo "  make loadtest-stop  - Stop loadtest services"
-	@echo "  make loadtest-clean - Clean rebuild of entire loadtest environment"
-	@echo "  make loadtest-run   - Run all load test scenarios"
-	@echo "  make loadtest-logs  - View loadtest app logs"
-	@echo ""
 	@echo "🛠️  Development Commands:"
 	@echo "  make dev            - Start with hot reload (requires cargo-watch)"
 	@echo "  make dev-no-watch   - Start without hot reload"
@@ -300,52 +292,6 @@ test-db-reset:
 test: test-db-up
 	@echo "🧪 Running tests..."
 	TEST_DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}" cargo test
-
-#
-# Load Test Commands
-#
-
-# Build loadtest environment (app + load generator)
-.PHONY: loadtest-build
-loadtest-build: frontend-build
-	@echo "🔨 Building loadtest environment..."
-	docker-compose -f docker-compose.loadtest.yml -p cavebatsofware-site-template-loadtest build app
-	docker-compose -f docker-compose.loadtest.yml -p cavebatsofware-site-template-loadtest build loadgen-legitimate loadgen-scanner loadgen-cache loadgen-burst
-	@echo "✅ Loadtest build complete!"
-
-# Start loadtest infrastructure
-.PHONY: loadtest-start
-loadtest-start:
-	@echo "🚀 Starting loadtest infrastructure..."
-	cd loadtest && ./run-loadtest.sh start
-
-# Stop loadtest services
-.PHONY: loadtest-stop
-loadtest-stop:
-	@echo "🛑 Stopping loadtest services..."
-	cd loadtest && ./run-loadtest.sh stop
-
-# Clean rebuild of entire loadtest environment
-.PHONY: loadtest-clean
-loadtest-clean: frontend-build
-	@echo "🧹 Cleaning and rebuilding loadtest environment..."
-	cd loadtest && ./run-loadtest.sh clean
-	docker-compose -f docker-compose.loadtest.yml -p cavebatsofware-site-template-loadtest build --no-cache app
-	docker-compose -f docker-compose.loadtest.yml -p cavebatsofware-site-template-loadtest build --no-cache loadgen-legitimate loadgen-scanner loadgen-cache loadgen-burst
-	cd loadtest && ./run-loadtest.sh start
-	@echo "✅ Loadtest environment rebuilt and started!"
-
-# Run all load test scenarios
-.PHONY: loadtest-run
-loadtest-run:
-	@echo "📊 Running all load test scenarios..."
-	cd loadtest && ./run-loadtest.sh test-all
-
-# View loadtest app logs
-.PHONY: loadtest-logs
-loadtest-logs:
-	@echo "📋 Loadtest app logs (Ctrl+C to exit)..."
-	docker-compose -f docker-compose.loadtest.yml -p cavebatsofware-site-template-loadtest logs -f app
 
 #
 # Development Commands

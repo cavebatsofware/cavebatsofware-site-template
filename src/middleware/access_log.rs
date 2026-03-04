@@ -70,6 +70,14 @@ pub async fn access_log_middleware(
     let status = response.status();
     let success = status.is_success();
 
+    // Update prometheus metrics
+    crate::metrics::HTTP_REQUESTS_TOTAL.inc();
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        crate::metrics::HTTP_RATE_LIMITED_TOTAL.inc();
+    } else if status.is_client_error() || status.is_server_error() {
+        crate::metrics::HTTP_ERRORS_TOTAL.inc();
+    }
+
     // Determine action type based on path for filtering
     let action_type = determine_action_type(&path);
 
