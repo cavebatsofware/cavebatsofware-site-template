@@ -37,11 +37,7 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(AdminUsers::Table)
-                    .add_column(
-                        string(AdminUsers::Role)
-                            .default("administrator")
-                            .not_null(),
-                    )
+                    .add_column(string(AdminUsers::Role).default("administrator").not_null())
                     .to_owned(),
             )
             .await?;

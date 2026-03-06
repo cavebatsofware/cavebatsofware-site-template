@@ -58,7 +58,9 @@ mod security_callbacks;
 mod settings;
 mod subscribe;
 
-use self::middleware::{access_log_middleware, csrf_middleware, require_admin_auth, require_administrator};
+use self::middleware::{
+    access_log_middleware, csrf_middleware, require_admin_auth, require_administrator,
+};
 use app::AppState;
 use basic_axum_rate_limit::{
     rate_limit_middleware, security_context_middleware_with_config, IpExtractionStrategy,

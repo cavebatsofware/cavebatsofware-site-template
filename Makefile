@@ -291,7 +291,9 @@ test-db-reset:
 .PHONY: test
 test: test-db-up
 	@echo "🧪 Running tests..."
-	TEST_DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}" cargo test
+	DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}" \
+	TEST_DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}" \
+	cargo test
 
 #
 # Development Commands

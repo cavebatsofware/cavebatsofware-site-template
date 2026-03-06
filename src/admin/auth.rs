@@ -33,28 +33,26 @@ use argon2::{
 };
 use axum_login::{AuthUser, AuthnBackend, UserId};
 use chrono::Utc;
-use lazy_static::lazy_static;
 use rand::Rng;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
     Set,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use std::{env, fmt};
 use uuid::Uuid;
 
 // Precomputed dummy hash for timing attack mitigation
 // This ensures password verification takes the same time regardless of whether the user exists
-lazy_static! {
-    static ref DUMMY_HASH: String = {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-        argon2
-            .hash_password(b"dummy_password_for_timing_attack_mitigation", &salt)
-            .expect("Failed to generate dummy hash")
-            .to_string()
-    };
-}
+static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    argon2
+        .hash_password(b"dummy_password_for_timing_attack_mitigation", &salt)
+        .expect("Failed to generate dummy hash")
+        .to_string()
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminUserAuth {

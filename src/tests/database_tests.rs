@@ -25,16 +25,14 @@
  */
 
 use crate::entities::{access_log, AccessLog};
-use crate::tests::{cleanup_test_db, setup_test_db};
+use crate::tests::test_db_from_pool;
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-use serial_test::serial;
 use uuid::Uuid;
 
-#[tokio::test]
-#[serial]
-async fn test_access_log_create_and_read() {
-    let db = setup_test_db().await;
+#[sqlx::test(migrations = false)]
+async fn test_access_log_create_and_read(pool: sqlx::PgPool) {
+    let db = test_db_from_pool(pool).await;
 
     let access_log = access_log::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -46,6 +44,8 @@ async fn test_access_log_create_and_read() {
         last_delta_access: Set(Some(1000)), // 1 second
         action: Set("view".to_string()),
         success: Set(true),
+        admin_user_id: Set(None),
+        admin_user_email: Set(None),
         created_at: Set(Utc::now().into()),
     };
 
@@ -71,14 +71,11 @@ async fn test_access_log_create_and_read() {
     let found_record = found.unwrap();
     assert_eq!(found_record.id, saved_log.id);
     assert_eq!(found_record.access_code, saved_log.access_code);
-
-    cleanup_test_db(&db).await;
 }
 
-#[tokio::test]
-#[serial]
-async fn test_access_log_query_by_ip() {
-    let db = setup_test_db().await;
+#[sqlx::test(migrations = false)]
+async fn test_access_log_query_by_ip(pool: sqlx::PgPool) {
+    let db = test_db_from_pool(pool).await;
 
     let test_ip_hash = "test-ip-hash";
 
@@ -95,6 +92,8 @@ async fn test_access_log_query_by_ip() {
             last_delta_access: Set(Some(i as i64 * 1000)),
             action: Set("view".to_string()),
             success: Set(true),
+            admin_user_id: Set(None),
+            admin_user_email: Set(None),
             created_at: Set(Utc::now().into()),
         };
 
@@ -119,14 +118,11 @@ async fn test_access_log_query_by_ip() {
         assert_eq!(log.ip_address, Some(test_ip_hash.to_string()));
         assert!(log.success);
     }
-
-    cleanup_test_db(&db).await;
 }
 
-#[tokio::test]
-#[serial]
-async fn test_access_log_failed_attempts() {
-    let db = setup_test_db().await;
+#[sqlx::test(migrations = false)]
+async fn test_access_log_failed_attempts(pool: sqlx::PgPool) {
+    let db = test_db_from_pool(pool).await;
 
     // Create some failed attempts
     for i in 1..=2 {
@@ -141,6 +137,8 @@ async fn test_access_log_failed_attempts() {
             last_delta_access: Set(Some(500)), // Quick succession
             action: Set("view".to_string()),
             success: Set(false), // Failed attempt
+            admin_user_id: Set(None),
+            admin_user_email: Set(None),
             created_at: Set(Utc::now().into()),
         };
 
@@ -170,14 +168,11 @@ async fn test_access_log_failed_attempts() {
         assert!(!attempt.success);
         assert_eq!(attempt.access_code, "invalid-code");
     }
-
-    cleanup_test_db(&db).await;
 }
 
-#[tokio::test]
-#[serial]
-async fn test_access_log_count_operations() {
-    let db = setup_test_db().await;
+#[sqlx::test(migrations = false)]
+async fn test_access_log_count_operations(pool: sqlx::PgPool) {
+    let db = test_db_from_pool(pool).await;
 
     let test_ip_hash = "count-test-ip";
 
@@ -194,6 +189,8 @@ async fn test_access_log_count_operations() {
             last_delta_access: Set(Some(1000)),
             action: Set("view".to_string()),
             success: Set(true),
+            admin_user_id: Set(None),
+            admin_user_email: Set(None),
             created_at: Set(Utc::now().into()),
         };
 
@@ -211,14 +208,11 @@ async fn test_access_log_count_operations() {
 
     assert!(count.is_ok(), "Should be able to count logs");
     assert_eq!(count.unwrap(), 5, "Should count 5 successful logs");
-
-    cleanup_test_db(&db).await;
 }
 
-#[tokio::test]
-#[serial]
-async fn test_access_log_ordering() {
-    let db = setup_test_db().await;
+#[sqlx::test(migrations = false)]
+async fn test_access_log_ordering(pool: sqlx::PgPool) {
+    let db = test_db_from_pool(pool).await;
 
     let test_ip_hash = "order-test-ip";
 
@@ -238,6 +232,8 @@ async fn test_access_log_ordering() {
             last_delta_access: Set(Some(i as i64 * 1000)),
             action: Set("view".to_string()),
             success: Set(true),
+            admin_user_id: Set(None),
+            admin_user_email: Set(None),
             created_at: Set((base_time + chrono::Duration::seconds(i as i64)).into()),
         };
 
@@ -261,6 +257,4 @@ async fn test_access_log_ordering() {
     // Verify descending order (most recent first)
     assert!(logs[0].tokens > logs[1].tokens);
     assert!(logs[1].tokens > logs[2].tokens);
-
-    cleanup_test_db(&db).await;
 }

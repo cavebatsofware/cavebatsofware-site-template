@@ -34,8 +34,8 @@ use openidconnect::{
     AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
     EndpointMaybeSet, EndpointNotSet, EndpointSet, IdTokenFields, IssuerUrl, Nonce,
     OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
-    RevocationErrorResponseType, Scope, StandardErrorResponse,
-    StandardTokenIntrospectionResponse, StandardTokenResponse, TokenResponse,
+    RevocationErrorResponseType, Scope, StandardErrorResponse, StandardTokenIntrospectionResponse,
+    StandardTokenResponse, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -92,10 +92,7 @@ pub struct OidcConfig {
 
 impl OidcConfig {
     pub fn from_env() -> Self {
-        let enabled = env::var("OIDC_ENABLED")
-            .unwrap_or_default()
-            .to_lowercase()
-            == "true";
+        let enabled = env::var("OIDC_ENABLED").unwrap_or_default().to_lowercase() == "true";
 
         Self {
             enabled,
@@ -226,9 +223,10 @@ impl OidcService {
         // Fallback: extract roles from access token (Keycloak includes realm_access
         // in the access token by default, but not always in the ID token)
         if roles.is_empty() {
-            if let Some(access_token_roles) =
-                Self::extract_roles_from_access_token(token_response.access_token().secret(), &self.config.role_claim)
-            {
+            if let Some(access_token_roles) = Self::extract_roles_from_access_token(
+                token_response.access_token().secret(),
+                &self.config.role_claim,
+            ) {
                 tracing::info!(
                     "Roles not found in ID token, extracted from access token: {:?}",
                     access_token_roles
@@ -252,7 +250,10 @@ impl OidcService {
     /// Decode a Keycloak JWT access token and extract roles from its claims.
     /// Keycloak access tokens are JWTs that typically contain realm_access.roles.
     /// No signature verification needed since the ID token was already verified.
-    fn extract_roles_from_access_token(access_token: &str, role_claim: &str) -> Option<Vec<String>> {
+    fn extract_roles_from_access_token(
+        access_token: &str,
+        role_claim: &str,
+    ) -> Option<Vec<String>> {
         let parts: Vec<&str> = access_token.split('.').collect();
         if parts.len() != 3 {
             return None;
@@ -272,7 +273,10 @@ impl OidcService {
 
         let last_part = claim_parts.last()?;
         let arr = current.get(last_part)?.as_array()?;
-        let roles: Vec<String> = arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+        let roles: Vec<String> = arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
 
         if roles.is_empty() {
             None

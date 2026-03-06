@@ -56,10 +56,7 @@ pub struct OidcState {
 
 /// GET /api/admin/oidc/login
 /// Redirects user to Keycloak authorization endpoint
-pub async fn oidc_login(
-    State(state): State<OidcState>,
-    session: Session,
-) -> AppResult<Redirect> {
+pub async fn oidc_login(State(state): State<OidcState>, session: Session) -> AppResult<Redirect> {
     let (auth_url, csrf_token, nonce, pkce_verifier) = state
         .oidc_service
         .authorization_url()
@@ -234,10 +231,6 @@ async fn find_or_create_oidc_user(
     };
 
     let result = new_user.insert(db).await?;
-    tracing::info!(
-        "Created new OIDC user: {} with role: {}",
-        email,
-        app_role
-    );
+    tracing::info!("Created new OIDC user: {} with role: {}", email, app_role);
     Ok(result)
 }

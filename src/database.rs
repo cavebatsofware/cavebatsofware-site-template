@@ -117,10 +117,10 @@ pub async fn establish_test_connection() -> Result<DatabaseConnection, DbErr> {
     let mut opt = ConnectOptions::new(database_url);
     opt.max_connections(10)
         .min_connections(1)
-        .connect_timeout(Duration::from_secs(5))
-        .acquire_timeout(Duration::from_secs(5))
-        .idle_timeout(Duration::from_secs(5))
-        .max_lifetime(Duration::from_secs(300));
+        .connect_timeout(Duration::from_secs(10))
+        .acquire_timeout(Duration::from_secs(10))
+        .idle_timeout(Duration::from_secs(300))
+        .max_lifetime(Duration::from_secs(600));
 
     Database::connect(opt).await
 }

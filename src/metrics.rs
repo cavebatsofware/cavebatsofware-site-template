@@ -1,60 +1,76 @@
 use basic_axum_rate_limit::RateLimiter;
-use lazy_static::lazy_static;
 use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
 use sea_orm::DatabaseConnection;
+use std::sync::LazyLock;
 
 use crate::security_callbacks::AppRateLimitCallbacks;
 
-lazy_static! {
-    // Request counters
-    pub static ref HTTP_REQUESTS_TOTAL: IntCounter = IntCounter::new(
+// Request counters
+pub static HTTP_REQUESTS_TOTAL: LazyLock<IntCounter> = LazyLock::new(|| {
+    IntCounter::new(
         "http_requests_total",
-        "Total number of HTTP requests received"
+        "Total number of HTTP requests received",
     )
-    .unwrap();
-    pub static ref HTTP_RATE_LIMITED_TOTAL: IntCounter = IntCounter::new(
+    .unwrap()
+});
+pub static HTTP_RATE_LIMITED_TOTAL: LazyLock<IntCounter> = LazyLock::new(|| {
+    IntCounter::new(
         "http_rate_limited_total",
-        "Total number of rate-limited (429) responses"
+        "Total number of rate-limited (429) responses",
     )
-    .unwrap();
-    pub static ref HTTP_ERRORS_TOTAL: IntCounter = IntCounter::new(
+    .unwrap()
+});
+pub static HTTP_ERRORS_TOTAL: LazyLock<IntCounter> = LazyLock::new(|| {
+    IntCounter::new(
         "http_errors_total",
-        "Total number of error responses (4xx and 5xx, excluding 429)"
+        "Total number of error responses (4xx and 5xx, excluding 429)",
     )
-    .unwrap();
+    .unwrap()
+});
 
-    // Gauges
-    pub static ref RATE_LIMIT_CACHE_ENTRIES: IntGauge = IntGauge::new(
+// Gauges
+pub static RATE_LIMIT_CACHE_ENTRIES: LazyLock<IntGauge> = LazyLock::new(|| {
+    IntGauge::new(
         "rate_limit_cache_entries",
-        "Number of entries in the rate limiter cache"
+        "Number of entries in the rate limiter cache",
     )
-    .unwrap();
-    pub static ref RATE_LIMIT_BLOCKED_IPS: IntGauge = IntGauge::new(
+    .unwrap()
+});
+pub static RATE_LIMIT_BLOCKED_IPS: LazyLock<IntGauge> = LazyLock::new(|| {
+    IntGauge::new(
         "rate_limit_blocked_ips",
-        "Number of currently blocked IPs in the rate limiter"
+        "Number of currently blocked IPs in the rate limiter",
     )
-    .unwrap();
-    pub static ref USERS_LOGGED_IN: IntGauge = IntGauge::new(
+    .unwrap()
+});
+pub static USERS_LOGGED_IN: LazyLock<IntGauge> = LazyLock::new(|| {
+    IntGauge::new(
         "users_logged_in",
-        "Number of currently logged-in admin users (active sessions)"
+        "Number of currently logged-in admin users (active sessions)",
     )
-    .unwrap();
-    pub static ref APP_MEMORY_RSS_BYTES: IntGauge = IntGauge::new(
+    .unwrap()
+});
+pub static APP_MEMORY_RSS_BYTES: LazyLock<IntGauge> = LazyLock::new(|| {
+    IntGauge::new(
         "app_memory_rss_bytes",
-        "Application resident set size (RSS) in bytes"
+        "Application resident set size (RSS) in bytes",
     )
-    .unwrap();
-    pub static ref NETWORK_RX_BYTES: IntGauge = IntGauge::new(
+    .unwrap()
+});
+pub static NETWORK_RX_BYTES: LazyLock<IntGauge> = LazyLock::new(|| {
+    IntGauge::new(
         "network_rx_bytes_total",
-        "Total bytes received across all network interfaces"
+        "Total bytes received across all network interfaces",
     )
-    .unwrap();
-    pub static ref NETWORK_TX_BYTES: IntGauge = IntGauge::new(
+    .unwrap()
+});
+pub static NETWORK_TX_BYTES: LazyLock<IntGauge> = LazyLock::new(|| {
+    IntGauge::new(
         "network_tx_bytes_total",
-        "Total bytes transmitted across all network interfaces"
+        "Total bytes transmitted across all network interfaces",
     )
-    .unwrap();
-}
+    .unwrap()
+});
 
 /// Register all metrics with the default prometheus registry.
 /// Called once at startup to ensure metrics are initialized.
@@ -172,7 +188,11 @@ pub async fn metrics_handler(
     let peer_ip = connect_info.0.ip();
 
     if !peer_ip.is_loopback() {
-        return (StatusCode::FORBIDDEN, "Metrics only available from localhost").into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            "Metrics only available from localhost",
+        )
+            .into_response();
     }
 
     let encoder = TextEncoder::new();

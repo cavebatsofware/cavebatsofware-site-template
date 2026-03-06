@@ -36,13 +36,11 @@ use aes_gcm::{
 };
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use lazy_static::lazy_static;
 use std::env;
+use std::sync::LazyLock;
 
 // The encryption key loaded from environment variable
-lazy_static! {
-    static ref ENCRYPTION_KEY: Option<Key<Aes256Gcm>> = load_encryption_key();
-}
+static ENCRYPTION_KEY: LazyLock<Option<Key<Aes256Gcm>>> = LazyLock::new(load_encryption_key);
 
 /// Load the encryption key from environment variable
 fn load_encryption_key() -> Option<Key<Aes256Gcm>> {
@@ -236,7 +234,7 @@ mod tests {
     fn test_encrypt_decrypt_roundtrip() {
         let test_key_hex = setup_test_key();
 
-        // Need to manually construct the key since lazy_static is already initialized
+        // Need to manually construct the key since LazyLock is already initialized
         let key_bytes = hex::decode(&test_key_hex).unwrap();
         let key: [u8; 32] = key_bytes.try_into().unwrap();
         let key = Key::<Aes256Gcm>::from(key);

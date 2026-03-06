@@ -27,16 +27,14 @@
 //! Password validation module implementing NIST SP 800-63B compliant requirements
 //! with additional complexity requirements for admin accounts.
 
-use lazy_static::lazy_static;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 // Top common passwords to reject - expanded list for better security
-lazy_static! {
-    static ref COMMON_PASSWORDS: HashSet<&'static str> = {
-        let passwords = include_str!("common_passwords.txt");
-        passwords.lines().collect()
-    };
-}
+static COMMON_PASSWORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    let passwords = include_str!("common_passwords.txt");
+    passwords.lines().collect()
+});
 
 const MIN_LENGTH: usize = 16;
 const MAX_LENGTH: usize = 128;
