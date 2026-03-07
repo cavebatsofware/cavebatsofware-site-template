@@ -24,27 +24,4 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
-#[cfg(test)]
-pub mod auth_tests;
-#[cfg(test)]
-pub mod database_tests;
-
-use crate::migration::{Migrator, MigratorTrait};
-use sea_orm::DatabaseConnection;
-
-/// Create a test email address using the configured SITE_DOMAIN.
-pub fn test_email(username: &str) -> String {
-    dotenvy::dotenv().ok();
-    let domain = std::env::var("SITE_DOMAIN").expect("SITE_DOMAIN must be set");
-    format!("{}@{}", username, domain)
-}
-
-/// Bridge an sqlx PgPool (provided by `#[sqlx::test]`) to a SeaORM
-/// `DatabaseConnection` and run all pending migrations.
-pub async fn test_db_from_pool(pool: sqlx::PgPool) -> DatabaseConnection {
-    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
-    Migrator::up(&db, None)
-        .await
-        .expect("Failed to run migrations");
-    db
-}
+pub use cavebatsofware_site_template::tests::{test_db_from_pool, test_email};

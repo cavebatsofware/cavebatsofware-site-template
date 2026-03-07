@@ -5,6 +5,7 @@ edition = "2021"
 
 [features]
 default = []
+e2e_testing = []
 
 [dependencies]
 basic-axum-rate-limit = "0.2.2"
@@ -55,6 +56,7 @@ url = "2.5.8"
 
 
 [dev-dependencies]
+cavebatsofware-site-template = { path = ".", features = ["e2e_testing"] }
 sqlx = { version = "0.8.6", features = ["migrate"] }
 axum-test = "18.4.1"
 tower = { version = "0.5.2", features = ["util"] }

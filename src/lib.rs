@@ -45,5 +45,5 @@ pub mod security_callbacks;
 pub mod settings;
 pub mod subscribe;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "e2e_testing"))]
 pub mod tests;

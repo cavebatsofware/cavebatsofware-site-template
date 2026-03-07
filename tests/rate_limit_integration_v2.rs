@@ -240,3 +240,85 @@ async fn test_different_ips_independent() {
         );
     }
 }
+
+#[tokio::test]
+async fn test_mixed_traffic_pattern() {
+    let config = RateLimitConfig::new(20, Duration::from_secs(60))
+        .with_grace_period(0)
+        .with_cache_refund_ratio(0.9)
+        .with_error_penalty(1.0);
+    let server = create_test_server(config);
+
+    // Mixed pattern:
+    // 10 successful requests (10 tokens)
+    for _ in 1..=10 {
+        let response = server
+            .get("/")
+            .add_header("X-Forwarded-For", "10.0.0.20")
+            .await;
+        assert_eq!(response.status_code(), StatusCode::OK);
+    }
+
+    // 5 cache hits (0.5 tokens total)
+    for _ in 1..=5 {
+        let response = server
+            .get("/cache")
+            .add_header("X-Forwarded-For", "10.0.0.20")
+            .add_header("If-None-Match", "etag")
+            .await;
+        assert_eq!(response.status_code(), StatusCode::NOT_MODIFIED);
+    }
+
+    // 5 errors (10 tokens: 5 * 2.0 with error_penalty=1.0)
+    for _ in 1..=5 {
+        let response = server
+            .get("/notfound")
+            .add_header("X-Forwarded-For", "10.0.0.20")
+            .await;
+        assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    // Total: 10 + 0.5 + 10 = 20.5 tokens (should be blocked)
+    let response = server
+        .get("/")
+        .add_header("X-Forwarded-For", "10.0.0.20")
+        .await;
+    assert_eq!(
+        response.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "Should be rate limited after mixed traffic"
+    );
+}
+
+#[tokio::test]
+async fn test_x_forwarded_for_parsing() {
+    let config = RateLimitConfig::new(2, Duration::from_secs(60)).with_grace_period(0);
+    let server = create_test_server(config);
+
+    // Single IP with default proxy_depth=1
+    server
+        .get("/")
+        .add_header("X-Forwarded-For", "192.168.1.1")
+        .await;
+    server
+        .get("/")
+        .add_header("X-Forwarded-For", "192.168.1.1")
+        .await;
+    let response = server
+        .get("/")
+        .add_header("X-Forwarded-For", "192.168.1.1")
+        .await;
+    assert_eq!(response.status_code(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Multi-IP X-Forwarded-For is rejected (400) when proxy_depth=1
+    // because the middleware validates the header contains exactly proxy_depth IPs
+    let response = server
+        .get("/")
+        .add_header("X-Forwarded-For", "10.0.1.1, 10.0.1.2")
+        .await;
+    assert_eq!(
+        response.status_code(),
+        StatusCode::BAD_REQUEST,
+        "Should reject multi-IP header when proxy_depth=1"
+    );
+}

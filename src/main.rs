@@ -40,36 +40,19 @@ use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::
 use tower_sessions::{cookie::SameSite, ExpiredDeletion, Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::PostgresStore;
 
-mod admin;
-mod app;
-mod contact;
-mod crypto;
-mod database;
-mod docx;
-mod email;
-mod entities;
-mod errors;
-mod metrics;
-mod middleware;
-mod migration;
-mod oidc;
-mod s3;
-mod security_callbacks;
-mod settings;
-mod subscribe;
-
-use self::middleware::{
-    access_log_middleware, csrf_middleware, require_admin_auth, require_administrator,
+use cavebatsofware_site_template::{
+    admin, app, contact, database, email, errors, metrics, middleware, subscribe,
 };
+
 use app::AppState;
 use basic_axum_rate_limit::{
     rate_limit_middleware, security_context_middleware_with_config, IpExtractionStrategy,
     SecurityContextConfig,
 };
 use errors::{AppError, AppResult};
-
-#[cfg(test)]
-mod tests;
+use middleware::{
+    access_log_middleware, csrf_middleware, require_admin_auth, require_administrator,
+};
 
 async fn serve_access(
     axum::extract::State(state): axum::extract::State<AppState>,

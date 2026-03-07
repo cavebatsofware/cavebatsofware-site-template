@@ -109,27 +109,6 @@ fn get_database_url() -> String {
     })
 }
 
-/// Establish test database connection (used in tests)
-#[cfg(test)]
-pub async fn establish_test_connection() -> Result<DatabaseConnection, DbErr> {
-    let database_url = get_test_database_url();
-
-    let mut opt = ConnectOptions::new(database_url);
-    opt.max_connections(10)
-        .min_connections(1)
-        .connect_timeout(Duration::from_secs(10))
-        .acquire_timeout(Duration::from_secs(10))
-        .idle_timeout(Duration::from_secs(300))
-        .max_lifetime(Duration::from_secs(600));
-
-    Database::connect(opt).await
-}
-
-#[cfg(test)]
-fn get_test_database_url() -> String {
-    dotenvy::var("TEST_DATABASE_URL").unwrap()
-}
-
 /// Close database connection gracefully
 pub async fn close_connection(db: DatabaseConnection) -> Result<(), DbErr> {
     db.close().await
