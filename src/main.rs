@@ -25,14 +25,11 @@
  */
 
 use axum::{
-    extract::Path,
     http::{header, StatusCode},
-    middleware::{from_fn, from_fn_with_state},
-    response::{Html, IntoResponse},
+    middleware::from_fn_with_state,
+    response::IntoResponse,
     routing::get,
-    Router,
 };
-use axum_login::AuthManagerLayerBuilder;
 use std::{env, sync::Arc};
 use time::Duration as TimeDuration;
 use tower::ServiceBuilder;
@@ -40,83 +37,15 @@ use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::
 use tower_sessions::{cookie::SameSite, ExpiredDeletion, Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::PostgresStore;
 
-use cavebatsofware_site_template::{
-    admin, app, contact, database, email, errors, metrics, middleware, subscribe,
-};
+use cavebatsofware_site_template::{admin, app, database, email, errors, metrics, middleware};
 
-use app::AppState;
+use app::{AppState, RouterDeps};
 use basic_axum_rate_limit::{
     rate_limit_middleware, security_context_middleware_with_config, IpExtractionStrategy,
     SecurityContextConfig,
 };
 use errors::{AppError, AppResult};
-use middleware::{
-    access_log_middleware, csrf_middleware, require_admin_auth, require_administrator,
-};
-
-async fn serve_access(
-    axum::extract::State(state): axum::extract::State<AppState>,
-    Path(code): Path<String>,
-) -> AppResult<Html<String>> {
-    if !state.is_valid_code(&code).await.unwrap_or(false) {
-        return Err(AppError::InvalidAccess);
-    }
-
-    tracing::info!("Valid access code used: {}", code);
-
-    let html_bytes =
-        state.s3.get_file(&code, "index.html").await.map_err(|e| {
-            AppError::FileSystem(std::io::Error::new(std::io::ErrorKind::NotFound, e))
-        })?;
-
-    let html_content = String::from_utf8(html_bytes).map_err(|e| {
-        AppError::FileSystem(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-    })?;
-
-    Ok(Html(html_content))
-}
-
-async fn download_access(
-    axum::extract::State(state): axum::extract::State<AppState>,
-    Path(code): Path<String>,
-) -> AppResult<impl IntoResponse> {
-    // Get access code details to retrieve custom filename
-    let access_code = state
-        .get_access_code(&code)
-        .await
-        .map_err(|e| AppError::FileSystem(std::io::Error::new(std::io::ErrorKind::NotFound, e)))?
-        .ok_or(AppError::InvalidAccess)?;
-
-    tracing::info!("Valid access code used for download: {}", code);
-
-    let docx_content = state
-        .s3
-        .get_file(&code, "Document.docx")
-        .await
-        .map_err(|e| AppError::FileSystem(std::io::Error::new(std::io::ErrorKind::NotFound, e)))?;
-
-    // Use custom filename if set, otherwise use default
-    let filename = access_code
-        .download_filename
-        .unwrap_or_else(|| "Grant_DeFayette_Document".to_string());
-
-    let content_disposition = format!("attachment; filename=\"{}.docx\"", filename);
-
-    let response = (
-        StatusCode::OK,
-        [
-            (
-                header::CONTENT_TYPE,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    .to_owned(),
-            ),
-            (header::CONTENT_DISPOSITION, content_disposition),
-        ],
-        docx_content,
-    );
-
-    Ok(response)
-}
+use middleware::access_log_middleware;
 
 async fn health_check() -> &'static str {
     "OK"
@@ -232,135 +161,26 @@ async fn main() -> anyhow::Result<()> {
 
     // Setup admin auth backend
     let admin_backend = admin::AdminAuthBackend::new(state.db.clone());
-    let auth_layer =
-        AuthManagerLayerBuilder::new(admin_backend.clone(), session_layer.clone()).build();
 
     // Setup email service
     let email_service = Arc::new(email::EmailService::new(state.settings.clone()).await?);
 
-    // Create admin state
-    let oidc_enabled = state.oidc.config.enabled;
-    let oidc_account_url = if oidc_enabled {
-        Some(format!(
-            "{}/account",
-            state.oidc.config.issuer_url.trim_end_matches('/')
-        ))
-    } else {
-        None
-    };
-    let admin_state = admin::routes::AdminState {
-        auth_backend: admin_backend.clone(),
+    // Build API routes via the shared router builder
+    let deps = RouterDeps {
+        state: state.clone(),
+        admin_backend: admin_backend.clone(),
         email_service: email_service.clone(),
-        settings: state.settings.clone(),
-        oidc_enabled,
-        oidc_account_url,
+        session_layer: session_layer.clone(),
     };
+    let api_routes = app::build_router(deps);
 
-    // Build admin routes (pass auth rate limiter for sensitive routes)
-    let admin_routes = admin::routes::admin_api_routes(state.auth_rate_limiter.clone())
-        .with_state(admin_state)
-        .layer(from_fn(csrf_middleware))
-        .layer(auth_layer.clone());
-
-    // Build OIDC routes (login redirect and callback)
-    let oidc_state = admin::oidc_routes::OidcState {
-        oidc_service: state.oidc.clone(),
-        db: state.db.clone(),
-    };
-    let oidc_routes = Router::new()
-        .route("/api/admin/oidc/login", get(admin::oidc_routes::oidc_login))
-        .route(
-            "/api/admin/oidc/callback",
-            get(admin::oidc_routes::oidc_callback),
-        )
-        .with_state(oidc_state)
-        .layer(auth_layer.clone());
-
-    // Build access code management routes
-    let access_code_state = admin::access_codes::AccessCodeState {
-        db: state.db.clone(),
-        s3: state.s3.clone(),
-    };
-    let access_code_routes = admin::access_codes::access_code_routes()
-        .with_state(access_code_state)
-        .layer(from_fn(require_administrator))
-        .layer(from_fn(require_admin_auth))
-        .layer(from_fn(csrf_middleware))
-        .layer(auth_layer.clone());
-
-    // Build access log management routes
-    let access_log_state = admin::access_logs::AccessLogState {
-        db: state.db.clone(),
-    };
-    let access_log_routes = admin::access_logs::access_log_routes()
-        .with_state(access_log_state)
-        .layer(from_fn(require_administrator))
-        .layer(from_fn(require_admin_auth))
-        .layer(from_fn(csrf_middleware))
-        .layer(auth_layer.clone());
-
-    // Build admin user management routes
-    let admin_user_state = admin::admin_users::AdminUserState {
-        db: state.db.clone(),
-        auth_backend: admin_backend.clone(),
-        email_service: email_service.clone(),
-    };
-    let admin_user_routes = admin::admin_users::admin_user_routes()
-        .with_state(admin_user_state)
-        .layer(from_fn(require_administrator))
-        .layer(from_fn(require_admin_auth))
-        .layer(from_fn(csrf_middleware))
-        .layer(auth_layer.clone());
-
-    // Build settings management routes
-    let settings_state = admin::settings::SettingsState {
-        settings: state.settings.clone(),
-    };
-    let settings_routes = admin::settings::settings_routes()
-        .with_state(settings_state)
-        .layer(from_fn(require_administrator))
-        .layer(from_fn(require_admin_auth))
-        .layer(from_fn(csrf_middleware))
-        .layer(auth_layer.clone());
-
-    let contact_state = contact::ContactState {
-        email_service: email_service.clone(),
-        callbacks: state.callbacks.clone(),
-    };
-    let contact_routes = contact::contact_routes()
-        .with_state(contact_state)
-        .layer(from_fn(csrf_middleware));
-
-    let subscribe_state = subscribe::SubscribeState {
-        email_service: email_service.clone(),
-        callbacks: state.callbacks.clone(),
-        db: state.db.clone(),
-    };
-    let subscribe_routes = subscribe::subscribe_routes()
-        .with_state(subscribe_state)
-        .layer(from_fn(csrf_middleware));
-
-    // Build the application with routes and middleware stack
-    let app = Router::new()
-        // API routes (highest priority)
-        .merge(admin_routes)
-        .merge(oidc_routes)
-        .merge(access_code_routes)
-        .merge(access_log_routes)
-        .merge(admin_user_routes)
-        .merge(settings_routes)
-        .merge(contact_routes)
-        .merge(subscribe_routes)
-        // Special routes
+    let app = api_routes
+        // Stateless special routes
         .route("/favicon.png", get(serve_favicon_png))
         .route("/favicon.svg", get(serve_favicon_svg))
         .route("/robots.txt", get(serve_robots))
         .route("/health", get(health_check))
         .route("/metrics", get(metrics::metrics_handler))
-        .route("/access/{code}", get(serve_access))
-        .route("/access/{code}/download", get(download_access))
-        .route("/document/{code}", get(serve_access))
-        .route("/document/{code}/download", get(download_access))
         // Admin panel
         .nest_service(
             "/admin/assets",
@@ -391,8 +211,7 @@ async fn main() -> anyhow::Result<()> {
                     header::HeaderValue::from_static("public, max-age=0"), // 1 minute
                 ))
                 .service(ServeDir::new("./public-assets").precompressed_gzip()),
-        )
-        .with_state(state.clone());
+        );
 
     // Configure IP extraction strategy based on environment
     // DEV_MODE=true uses socket address (direct connections without proxy)

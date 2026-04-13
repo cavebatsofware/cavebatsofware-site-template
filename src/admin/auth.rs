@@ -64,6 +64,7 @@ pub struct AdminUserAuth {
     pub active: bool,
     pub force_password_change: bool,
     pub role: String,
+    pub(crate) session_hash: Vec<u8>,
 }
 
 impl AuthUser for AdminUserAuth {
@@ -74,8 +75,21 @@ impl AuthUser for AdminUserAuth {
     }
 
     fn session_auth_hash(&self) -> &[u8] {
-        self.email.as_bytes()
+        &self.session_hash
     }
+}
+
+/// Compute a BLAKE2b digest of security-relevant fields.
+/// Changes to password, email, or TOTP secret will invalidate existing sessions.
+/// This is roughly equal or better than SHA256 and faster, but more importantly,
+/// already pulled in by argon2 which is the primary password hashing method
+pub(crate) fn compute_session_hash(password_hash: &str, email: &str, totp_secret: Option<&str>) -> Vec<u8> {
+    use blake2::{Blake2b512, Digest};
+    let mut hasher = Blake2b512::new();
+    hasher.update(password_hash.as_bytes());
+    hasher.update(email.as_bytes());
+    hasher.update(totp_secret.unwrap_or("").as_bytes());
+    hasher.finalize().to_vec()
 }
 
 #[derive(Clone)]
@@ -117,6 +131,7 @@ impl AdminAuthBackend {
 
         // Generate verification token
         let verification_token = generate_verification_token();
+        let encrypted_token = encrypt_token(&verification_token)?;
         let verification_expires = Utc::now() + chrono::Duration::hours(24);
 
         let admin = admin_user::ActiveModel {
@@ -124,7 +139,7 @@ impl AdminAuthBackend {
             email: Set(email.to_string()),
             password_hash: Set(password_hash),
             email_verified: Set(false),
-            verification_token: Set(Some(verification_token.clone())),
+            verification_token: Set(Some(encrypted_token)),
             verification_token_expires_at: Set(Some(verification_expires.into())),
             created_at: Set(Utc::now().into()),
             updated_at: Set(Utc::now().into()),
@@ -496,10 +511,22 @@ impl AdminAuthBackend {
     }
 
     pub async fn verify_email(&self, token: &str) -> Result<admin_user::Model> {
-        let admin = AdminUser::find()
-            .filter(admin_user::Column::VerificationToken.eq(token))
-            .one(&self.db)
-            .await?
+        use crate::crypto::decrypt_token;
+
+        // Tokens are stored encrypted, so we must decrypt and compare
+        let admins = AdminUser::find()
+            .filter(admin_user::Column::VerificationToken.is_not_null())
+            .all(&self.db)
+            .await?;
+
+        let admin = admins
+            .into_iter()
+            .find(|a| {
+                a.verification_token
+                    .as_deref()
+                    .and_then(|encrypted| decrypt_token(encrypted).ok())
+                    .map_or(false, |decrypted| decrypted == token)
+            })
             .ok_or_else(|| anyhow::anyhow!("Invalid verification token"))?;
 
         // Check if token is expired
@@ -596,6 +623,11 @@ impl AuthnBackend for AdminAuthBackend {
             }
 
             let totp_enabled = admin.totp_enabled.unwrap_or(false);
+            let session_hash = compute_session_hash(
+                &admin.password_hash,
+                &admin.email,
+                admin.totp_secret.as_deref(),
+            );
             Ok(Some(AdminUserAuth {
                 id: admin.id,
                 email: admin.email,
@@ -607,6 +639,7 @@ impl AuthnBackend for AdminAuthBackend {
                 active: admin.active,
                 force_password_change: admin.force_password_change,
                 role: admin.role,
+                session_hash,
             }))
         }
     }
@@ -625,6 +658,11 @@ impl AuthnBackend for AdminAuthBackend {
 
             Ok(admin.map(|a| {
                 let totp_enabled = a.totp_enabled.unwrap_or(false);
+                let session_hash = compute_session_hash(
+                    &a.password_hash,
+                    &a.email,
+                    a.totp_secret.as_deref(),
+                );
                 AdminUserAuth {
                     id: a.id,
                     email: a.email,
@@ -637,6 +675,7 @@ impl AuthnBackend for AdminAuthBackend {
                     active: a.active,
                     force_password_change: a.force_password_change,
                     role: a.role,
+                    session_hash,
                 }
             }))
         }

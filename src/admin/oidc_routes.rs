@@ -148,6 +148,11 @@ pub async fn oidc_callback(
     }
 
     // Create AdminUserAuth and log in via axum-login session
+    let session_hash = crate::admin::auth::compute_session_hash(
+        &admin.password_hash,
+        &admin.email,
+        admin.totp_secret.as_deref(),
+    );
     let user_auth = AdminUserAuth {
         id: admin.id,
         email: admin.email.clone(),
@@ -157,6 +162,7 @@ pub async fn oidc_callback(
         active: admin.active,
         force_password_change: false, // Not applicable for OIDC users
         role: admin.role,
+        session_hash,
     };
 
     auth_session

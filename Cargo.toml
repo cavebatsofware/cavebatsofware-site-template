@@ -26,6 +26,7 @@ chrono = { version = "0.4.44", features = ["serde"] }
 uuid = { version = "1.22.0", features = ["v4", "serde"] }
 thiserror = "2.0.18"
 argon2 = "0.5.3"
+blake2 = "0.10.6"
 rand = "0.9.2"
 hex = "0.4.3"
 async-trait = "0.1.89"
@@ -60,3 +61,12 @@ cavebatsofware-site-template = { path = ".", features = ["e2e_testing"] }
 sqlx = { version = "0.8.6", features = ["migrate"] }
 axum-test = "18.4.1"
 tower = { version = "0.5.2", features = ["util"] }
+totp-rs = { version = "5.7", features = ["gen_secret"] }
+wiremock = "0.6.5"
+aws-smithy-mocks = "0.2.6"
+aws-smithy-runtime-api = "1.11.6"
+aws-smithy-types = "1.4.7"
+aws-sdk-sesv2 = { version = "1.115.0", features = ["test-util"] }
+aws-sdk-s3 = { version = "1.125.0", features = ["test-util"] }
+rsa = { version = "0.9.10", features = ["pem"] }
+rand_core = { version = "0.6", features = ["std"] }

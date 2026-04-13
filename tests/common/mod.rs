@@ -24,4 +24,191 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
+#![allow(dead_code)]
+
+pub mod oidc_mock;
+pub mod s3_mock;
+pub mod ses_mock;
+
 pub use cavebatsofware_site_template::tests::{test_db_from_pool, test_email};
+
+use cavebatsofware_site_template::admin::AdminAuthBackend;
+use cavebatsofware_site_template::app::{AppState, RouterDeps, build_router};
+use cavebatsofware_site_template::email::EmailService;
+use cavebatsofware_site_template::entities::admin_user;
+use cavebatsofware_site_template::oidc::{OidcConfig, OidcService};
+use cavebatsofware_site_template::s3::S3Service;
+use cavebatsofware_site_template::security_callbacks::AppRateLimitCallbacks;
+use cavebatsofware_site_template::settings::SettingsService;
+
+use axum::extract::connect_info::MockConnectInfo;
+use axum::http::StatusCode;
+use axum::middleware::from_fn_with_state;
+use axum_test::TestServer;
+use basic_axum_rate_limit::{
+    IpExtractionStrategy, RateLimitConfig, RateLimiter, SecurityContextConfig,
+    security_context_middleware_with_config,
+};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
+use tower_sessions::SessionManagerLayer;
+use tower_sessions_sqlx_store::PostgresStore;
+
+pub const TEST_PASSWORD: &str = "MyStr0ng!Password123";
+
+/// Optional service overrides for `build_test_server_with`. Any field left as
+/// `None` falls back to the default construction path (real constructors that
+/// either hit the network or are disabled — see the individual defaults).
+#[derive(Default)]
+pub struct TestServices {
+    pub email: Option<Arc<EmailService>>,
+    pub s3: Option<S3Service>,
+    pub oidc: Option<OidcService>,
+}
+
+pub async fn build_test_server(
+    pool: sqlx::PgPool,
+) -> (TestServer, AdminAuthBackend, sea_orm::DatabaseConnection) {
+    build_test_server_with(pool, TestServices::default()).await
+}
+
+pub async fn build_test_server_with(
+    pool: sqlx::PgPool,
+    services: TestServices,
+) -> (TestServer, AdminAuthBackend, sea_orm::DatabaseConnection) {
+    dotenvy::dotenv().ok();
+
+    let db = test_db_from_pool(pool.clone()).await;
+
+    let callbacks = AppRateLimitCallbacks::new(db.clone(), false, false);
+
+    let config = RateLimitConfig::new(10000, Duration::from_secs(60));
+    let rate_limiter = RateLimiter::new(config.clone(), callbacks.clone());
+    let auth_rate_limiter = RateLimiter::new(config, callbacks.clone());
+
+    let settings = SettingsService::new(db.clone());
+
+    let s3 = match services.s3 {
+        Some(s3) => s3,
+        None => S3Service::new()
+            .await
+            .expect("S3Service::new should succeed in tests"),
+    };
+
+    let oidc = match services.oidc {
+        Some(oidc) => oidc,
+        None => {
+            let oidc_config = OidcConfig {
+                enabled: false,
+                issuer_url: String::new(),
+                client_id: String::new(),
+                client_secret: String::new(),
+                redirect_uri: String::new(),
+                scopes: vec!["openid".to_string()],
+                role_claim: "realm_access.roles".to_string(),
+                admin_role: "admin".to_string(),
+            };
+            OidcService::new(oidc_config)
+                .await
+                .expect("OidcService::new should succeed with enabled=false")
+        }
+    };
+
+    let state = AppState {
+        db: db.clone(),
+        rate_limiter,
+        auth_rate_limiter,
+        callbacks,
+        settings: settings.clone(),
+        s3,
+        oidc,
+        enable_logging: false,
+        log_successful_attempts: false,
+    };
+
+    let admin_backend = AdminAuthBackend::new(db.clone());
+    let email_service = match services.email {
+        Some(email) => email,
+        None => {
+            // Preserve legacy test behavior: build a real EmailService.
+            // `SITE_URL` must be set in the test environment (e.g. via .env).
+            Arc::new(
+                EmailService::new(settings)
+                    .await
+                    .expect("EmailService::new should succeed in tests"),
+            )
+        }
+    };
+
+    let session_store = PostgresStore::new(pool);
+    session_store
+        .migrate()
+        .await
+        .expect("session table migration should succeed");
+    let session_layer = SessionManagerLayer::new(session_store);
+
+    let deps = RouterDeps {
+        state,
+        admin_backend: admin_backend.clone(),
+        email_service,
+        session_layer,
+    };
+    let app = build_router(deps);
+
+    // Add SecurityContext middleware + MockConnectInfo (needed by auth rate limiter)
+    let security_config =
+        SecurityContextConfig::new().with_ip_extraction(IpExtractionStrategy::SocketAddr);
+    let socket_addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+
+    let app = app
+        .layer(from_fn_with_state(
+            security_config,
+            security_context_middleware_with_config,
+        ))
+        .layer(MockConnectInfo(socket_addr));
+
+    let server = TestServer::builder().save_cookies().build(app).unwrap();
+
+    (server, admin_backend, db)
+}
+
+pub async fn create_verified_admin(
+    backend: &AdminAuthBackend,
+    email: &str,
+    password: &str,
+) -> admin_user::Model {
+    let (_admin, token) = backend.create_admin(email, password).await.unwrap();
+    backend.verify_email(&token).await.unwrap()
+}
+
+pub async fn get_csrf_token(server: &TestServer) -> String {
+    let response = server.get("/api/admin/csrf-token").await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let json: serde_json::Value = response.json();
+    json["token"].as_str().unwrap().to_string()
+}
+
+pub async fn login_as(server: &TestServer, email: &str, password: &str) {
+    let token = get_csrf_token(server).await;
+    let response = server
+        .post("/api/admin/login")
+        .add_header("x-csrf-token", &token)
+        .json(&serde_json::json!({
+            "email": email,
+            "password": password,
+        }))
+        .await;
+    assert_ne!(
+        response.status_code(),
+        StatusCode::FORBIDDEN,
+        "Login should not be blocked by CSRF for {}",
+        email
+    );
+    assert_ne!(
+        response.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "Login should succeed for {}",
+        email
+    );
+}

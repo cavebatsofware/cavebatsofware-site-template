@@ -122,6 +122,11 @@ async fn register(
         ));
     }
 
+    // Validate password strength
+    if let Err(errors) = PasswordValidator::validate(&req.password, &req.email) {
+        return Err(AppError::ValidationError(errors.join("; ")));
+    }
+
     // Create admin user
     let (admin, verification_token) = state
         .auth_backend
@@ -318,7 +323,11 @@ struct MfaSetupResponse {
 
 /// Generate a new TOTP secret and QR code for MFA setup
 /// Requires full authentication (not pending MFA)
-async fn mfa_setup(auth_session: AdminAuthSession) -> AppResult<Json<MfaSetupResponse>> {
+async fn mfa_setup(
+    State(state): State<AdminState>,
+    auth_session: AdminAuthSession,
+) -> AppResult<Json<MfaSetupResponse>> {
+    require_local_auth(state.oidc_enabled)?;
     let user = get_authenticated_user(&auth_session)?;
 
     // Don't allow setup if MFA is already pending verification
@@ -357,6 +366,7 @@ async fn mfa_confirm_setup(
     session: Session,
     Json(req): Json<MfaConfirmRequest>,
 ) -> AppResult<Json<MfaConfirmResponse>> {
+    require_local_auth(state.oidc_enabled)?;
     let user = get_authenticated_user(&auth_session)?;
 
     // Verify and save the secret in one step
@@ -406,6 +416,7 @@ async fn mfa_verify(
     session: Session,
     Json(req): Json<MfaVerifyRequest>,
 ) -> AppResult<Json<MfaVerifyResponse>> {
+    require_local_auth(state.oidc_enabled)?;
     let user = get_authenticated_user(&auth_session)?;
 
     // Must have MFA enabled
@@ -509,6 +520,7 @@ async fn mfa_disable(
     session: Session,
     Json(req): Json<MfaDisableRequest>,
 ) -> AppResult<Json<MfaDisableResponse>> {
+    require_local_auth(state.oidc_enabled)?;
     let user = get_authenticated_user(&auth_session)?;
 
     // Must be fully authenticated - check session for MFA verification
@@ -579,6 +591,7 @@ async fn change_password(
     session: Session,
     Json(req): Json<ChangePasswordRequest>,
 ) -> AppResult<Json<ChangePasswordResponse>> {
+    require_local_auth(state.oidc_enabled)?;
     let user = get_authenticated_user(&auth_session)?;
 
     // Must be fully authenticated (MFA verified if enabled)

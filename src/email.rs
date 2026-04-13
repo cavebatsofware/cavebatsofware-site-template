@@ -41,6 +41,16 @@ pub struct EmailService {
 }
 
 impl EmailService {
+    /// Construct an `EmailService` from a pre-built SES client. Used by
+    /// `new()` for production and by tests that inject a mocked client.
+    pub fn with_client(client: SesClient, settings: SettingsService, site_url: String) -> Self {
+        Self {
+            client,
+            settings,
+            site_url,
+        }
+    }
+
     pub async fn new(settings: SettingsService) -> Result<Self> {
         let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
 
@@ -52,13 +62,10 @@ impl EmailService {
         let config = config_loader.load().await;
         let client = SesClient::new(&config);
 
-        let site_url = env::var("SITE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        let site_url = env::var("SITE_URL")
+            .map_err(|_| anyhow::anyhow!("SITE_URL environment variable must be set"))?;
 
-        Ok(Self {
-            client,
-            settings,
-            site_url,
-        })
+        Ok(Self::with_client(client, settings, site_url))
     }
 
     pub async fn send_verification_email(

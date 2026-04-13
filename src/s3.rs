@@ -35,6 +35,15 @@ pub struct S3Service {
 }
 
 impl S3Service {
+    /// Construct an `S3Service` from a pre-built S3 client. Used by `new()`
+    /// for production and by tests that inject a mocked client.
+    pub fn with_client(client: Client, bucket_name: String) -> Self {
+        Self {
+            client,
+            bucket_name,
+        }
+    }
+
     pub async fn new() -> Result<Self> {
         let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .load()
@@ -69,10 +78,7 @@ impl S3Service {
         let bucket_name = env::var("S3_BUCKET_NAME")
             .unwrap_or_else(|_| "cavebatsofware-site-template-documents".to_string());
 
-        Ok(Self {
-            client,
-            bucket_name,
-        })
+        Ok(Self::with_client(client, bucket_name))
     }
 
     /// Fetch a file from S3 at path: {code}/{filename}
