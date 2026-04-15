@@ -38,9 +38,11 @@ use anyhow::Result;
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse};
-use axum::{middleware::from_fn, routing::get, Router};
+use axum::{middleware::{from_fn, from_fn_with_state}, routing::get, Router};
 use axum_login::AuthManagerLayerBuilder;
-use basic_axum_rate_limit::{RateLimitConfig, RateLimiter, RequestScreener, ScreeningConfig};
+use basic_axum_rate_limit::{
+    rate_limit_middleware, RateLimitConfig, RateLimiter, RequestScreener, ScreeningConfig,
+};
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::env;
@@ -134,7 +136,7 @@ impl AppState {
                 r"\.cgi$".to_string(),
                 r"/CSCOL/".to_string(),
                 r"/passwd/".to_string(),
-                r"/\/sap\//".to_string(),
+                r"/sap/".to_string(),
                 r"(\$|%24)(\{|%7B)".to_string(), // JNDI injection patterns
             ])
             .with_user_agent_patterns(vec![
@@ -263,6 +265,10 @@ async fn serve_access(
     State(state): State<AppState>,
     Path(code): Path<String>,
 ) -> AppResult<Html<String>> {
+    if !state.settings.get_access_codes_enabled().await.unwrap_or(true) {
+        return Err(AppError::InvalidAccess);
+    }
+
     if !state.is_valid_code(&code).await.unwrap_or(false) {
         return Err(AppError::InvalidAccess);
     }
@@ -286,6 +292,10 @@ async fn download_access(
     State(state): State<AppState>,
     Path(code): Path<String>,
 ) -> AppResult<impl IntoResponse> {
+    if !state.settings.get_access_codes_enabled().await.unwrap_or(true) {
+        return Err(AppError::InvalidAccess);
+    }
+
     // Get access code details to retrieve custom filename
     let access_code = state
         .get_access_code(&code)
@@ -379,6 +389,10 @@ pub fn build_router(deps: RouterDeps) -> Router {
             get(admin::oidc_routes::oidc_callback),
         )
         .with_state(oidc_state)
+        .layer(from_fn_with_state(
+            state.auth_rate_limiter.clone(),
+            rate_limit_middleware,
+        ))
         .layer(auth_layer.clone());
 
     // Access code management routes
@@ -432,6 +446,7 @@ pub fn build_router(deps: RouterDeps) -> Router {
     let contact_state = contact::ContactState {
         email_service: email_service.clone(),
         callbacks: state.callbacks.clone(),
+        settings: state.settings.clone(),
     };
     let contact_routes = contact::contact_routes()
         .with_state(contact_state)
@@ -443,6 +458,7 @@ pub fn build_router(deps: RouterDeps) -> Router {
         email_service: email_service.clone(),
         callbacks: state.callbacks.clone(),
         db: state.db.clone(),
+        settings: state.settings.clone(),
     };
     let subscribe_routes = subscribe::subscribe_routes()
         .with_state(subscribe_state)

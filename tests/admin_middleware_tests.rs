@@ -28,32 +28,12 @@ mod common;
 
 use cavebatsofware_site_template::entities::admin_user;
 use common::{
-    build_test_server, create_verified_admin, get_csrf_token, login_as, test_email, TEST_PASSWORD,
+    build_test_server, create_verified_admin, generate_totp_code, get_csrf_token, login_as,
+    test_email, TEST_PASSWORD, TEST_TOTP_SECRET,
 };
 
 use axum::http::StatusCode;
 use sea_orm::{ActiveModelTrait, Set};
-use totp_rs::{Algorithm, Secret, TOTP};
-
-const TEST_TOTP_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
-
-// ==================== Helpers ====================
-
-fn generate_totp_code(secret: &str, email: &str) -> String {
-    let totp = TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        Secret::Encoded(secret.to_string())
-            .to_bytes()
-            .unwrap(),
-        None,
-        email.to_string(),
-    )
-    .unwrap();
-    totp.generate_current().unwrap()
-}
 
 // ==================== require_admin_auth tests ====================
 
@@ -64,7 +44,8 @@ async fn test_unauthenticated_request_returns_401(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/access-codes").await;
 
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
-    assert_eq!(response.text(), "Not authenticated");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Not authenticated");
 }
 
 #[sqlx::test(migrations = false)]
@@ -95,7 +76,8 @@ async fn test_mfa_enabled_not_verified_returns_403(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/access-codes").await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "MFA verification required");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "MFA verification required");
 }
 
 #[sqlx::test(migrations = false)]
@@ -146,7 +128,8 @@ async fn test_force_password_change_blocks_normal_routes(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/access-codes").await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "Password change required");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Password change required");
 }
 
 #[sqlx::test(migrations = false)]
@@ -235,5 +218,6 @@ async fn test_non_admin_role_returns_403(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/access-codes").await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "Insufficient permissions");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Insufficient permissions");
 }

@@ -181,7 +181,7 @@ async fn update_admin_user(
     if let Some(active) = req.active {
         if active && !admin.active {
             // Reactivate user
-            let (updated, verification_token) = state
+            let (_, verification_token) = state
                 .auth_backend
                 .reactivate_user(user_id)
                 .await
@@ -190,22 +190,18 @@ async fn update_admin_user(
             // Send verification email for reactivated user
             if let Err(e) = state
                 .email_service
-                .send_verification_email(&updated.email, &verification_token)
+                .send_verification_email(&target_email, &verification_token)
                 .await
             {
                 tracing::warn!("Failed to send verification email: {}", e);
             }
-
-            return Ok(Json(updated.into()));
         } else if !active && admin.active {
             // Deactivate user
-            let updated = state
+            state
                 .auth_backend
                 .deactivate_user(user_id, current_user.id)
                 .await
                 .map_err(|e| AppError::AuthError(e.to_string()))?;
-
-            return Ok(Json(updated.into()));
         }
     }
 

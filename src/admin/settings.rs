@@ -64,7 +64,7 @@ async fn get_all_settings(
 
     let settings = state.settings.get_all().await.map_err(|e| {
         tracing::error!("Failed to get settings from database: {}", e);
-        crate::errors::AppError::AuthError(e.to_string())
+        crate::errors::AppError::InternalError(e.to_string())
     })?;
 
     tracing::info!("Found {} settings", settings.len());
@@ -99,7 +99,7 @@ async fn update_setting(
         .settings
         .set(&req.key, &req.value, req.category.as_deref(), None)
         .await
-        .map_err(|e| crate::errors::AppError::AuthError(e.to_string()))?;
+        .map_err(|e| crate::errors::AppError::InternalError(e.to_string()))?;
 
     Ok(StatusCode::OK)
 }

@@ -138,4 +138,30 @@ mod tests {
         let result = verify_code(&setup.secret_base32, "000000", "test@example.com");
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_verify_code_with_valid_code() {
+        let email = "test@example.com";
+        let setup = generate_secret(email).unwrap();
+
+        // Generate a valid code from the same secret
+        let totp = TOTP::new(
+            Algorithm::SHA1,
+            6,
+            1,
+            30,
+            Secret::Encoded(setup.secret_base32.clone())
+                .to_bytes()
+                .unwrap(),
+            Some("PersonalSite".to_string()),
+            email.to_string(),
+        )
+        .unwrap();
+        let code = totp.generate_current().unwrap();
+
+        assert!(
+            verify_code(&setup.secret_base32, &code, email).unwrap(),
+            "Valid TOTP code should verify successfully"
+        );
+    }
 }

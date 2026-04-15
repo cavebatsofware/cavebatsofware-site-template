@@ -103,7 +103,9 @@ struct StagedToken {
 fn shared_key() -> &'static (Arc<RsaPrivateKey>, Arc<RsaPublicKey>, String) {
     static KEY: OnceLock<(Arc<RsaPrivateKey>, Arc<RsaPublicKey>, String)> = OnceLock::new();
     KEY.get_or_init(|| {
-        let mut rng = rand_core::OsRng;
+        // rsa 0.9 requires rand_core 0.6's CryptoRngCore, which is incompatible
+        // with rand 0.10's RNG types. Use rsa's re-exported OsRng for compatibility.
+        let mut rng = rsa::rand_core::OsRng;
         let private = RsaPrivateKey::new(&mut rng, 2048).expect("RSA keygen");
         let public = RsaPublicKey::from(&private);
         let pem = private

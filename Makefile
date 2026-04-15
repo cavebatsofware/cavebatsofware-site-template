@@ -303,23 +303,12 @@ test: test-db-up
 .PHONY: dev
 dev: db-up frontend-build
 	@echo "🔧 Starting development servers with hot reload..."
-	@echo "👀 Astro will watch for frontend changes"
 	@echo "⚛️  Admin frontend will watch for changes"
 	@echo "🦀 Cargo will watch for Rust changes"
 	@echo "📝 Press Ctrl+C to stop all servers"
 	@echo ""
-	@make -j3 astro-watch admin-watch rust-watch
-
-# Astro watch mode (auto-rebuild on changes)
-.PHONY: astro-watch
-astro-watch:
-	@echo "👀 Starting Astro in watch mode..."
-	@if [ -n "$(PUBLIC_FRONTEND_PATH)" ] && [ -d "$(PUBLIC_FRONTEND_PATH)" ]; then \
-		echo "📂 Using external frontend: $(PUBLIC_FRONTEND_PATH)"; \
-		cd "$(PUBLIC_FRONTEND_PATH)" && SITE_URL="$(SITE_URL)" npm run build -- --watch --outDir "$(CURDIR)/public-assets"; \
-	else \
-		cd public-frontend && SITE_URL="$(SITE_URL)" npm run build -- --watch; \
-	fi
+	DEV_MODE=true \
+	make -j2 admin-watch rust-watch
 
 # Admin frontend watch mode (auto-rebuild on changes)
 .PHONY: admin-watch
@@ -421,7 +410,7 @@ public-build:
 	fi
 	@echo "✅ Public site built to public-assets/"
 
-# Build both frontends
+# Build all frontends
 .PHONY: frontend-build
-frontend-build: admin-build public-build
+frontend-build: admin-build
 	@echo "✅ All frontends built!"

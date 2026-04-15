@@ -24,7 +24,7 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub mod oidc_mock;
 pub mod s3_mock;
@@ -34,6 +34,7 @@ pub use cavebatsofware_site_template::tests::{test_db_from_pool, test_email};
 
 use cavebatsofware_site_template::admin::AdminAuthBackend;
 use cavebatsofware_site_template::app::{AppState, RouterDeps, build_router};
+use cavebatsofware_site_template::middleware::access_log_middleware;
 use cavebatsofware_site_template::email::EmailService;
 use cavebatsofware_site_template::entities::admin_user;
 use cavebatsofware_site_template::oidc::{OidcConfig, OidcService};
@@ -52,10 +53,12 @@ use basic_axum_rate_limit::{
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use totp_rs::{Algorithm, Secret, TOTP};
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 pub const TEST_PASSWORD: &str = "MyStr0ng!Password123";
+pub const TEST_TOTP_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 
 /// Optional service overrides for `build_test_server_with`. Any field left as
 /// `None` falls back to the default construction path (real constructors that
@@ -65,6 +68,8 @@ pub struct TestServices {
     pub email: Option<Arc<EmailService>>,
     pub s3: Option<S3Service>,
     pub oidc: Option<OidcService>,
+    pub enable_logging: Option<bool>,
+    pub log_successful_attempts: Option<bool>,
 }
 
 pub async fn build_test_server(
@@ -81,7 +86,9 @@ pub async fn build_test_server_with(
 
     let db = test_db_from_pool(pool.clone()).await;
 
-    let callbacks = AppRateLimitCallbacks::new(db.clone(), false, false);
+    let enable_logging = services.enable_logging.unwrap_or(false);
+    let log_successful = services.log_successful_attempts.unwrap_or(false);
+    let callbacks = AppRateLimitCallbacks::new(db.clone(), enable_logging, log_successful);
 
     let config = RateLimitConfig::new(10000, Duration::from_secs(60));
     let rate_limiter = RateLimiter::new(config.clone(), callbacks.clone());
@@ -91,9 +98,10 @@ pub async fn build_test_server_with(
 
     let s3 = match services.s3 {
         Some(s3) => s3,
-        None => S3Service::new()
-            .await
-            .expect("S3Service::new should succeed in tests"),
+        None => {
+            let spy = s3_mock::S3Spy::new();
+            s3_mock::build_test_s3_service(s3_mock::mock_s3_default(&spy))
+        }
     };
 
     let oidc = match services.oidc {
@@ -123,8 +131,8 @@ pub async fn build_test_server_with(
         settings: settings.clone(),
         s3,
         oidc,
-        enable_logging: false,
-        log_successful_attempts: false,
+        enable_logging: services.enable_logging.unwrap_or(false),
+        log_successful_attempts: services.log_successful_attempts.unwrap_or(false),
     };
 
     let admin_backend = AdminAuthBackend::new(db.clone());
@@ -148,13 +156,22 @@ pub async fn build_test_server_with(
         .expect("session table migration should succeed");
     let session_layer = SessionManagerLayer::new(session_store);
 
+    let app_state_for_logging = state.clone();
     let deps = RouterDeps {
         state,
         admin_backend: admin_backend.clone(),
         email_service,
         session_layer,
     };
-    let app = build_router(deps);
+    let mut app = build_router(deps);
+
+    // Add access log middleware when logging is enabled
+    if enable_logging {
+        app = app.layer(from_fn_with_state(
+            app_state_for_logging,
+            access_log_middleware,
+        ));
+    }
 
     // Add SecurityContext middleware + MockConnectInfo (needed by auth rate limiter)
     let security_config =
@@ -168,7 +185,7 @@ pub async fn build_test_server_with(
         ))
         .layer(MockConnectInfo(socket_addr));
 
-    let server = TestServer::builder().save_cookies().build(app).unwrap();
+    let server = TestServer::builder().save_cookies().build(app);
 
     (server, admin_backend, db)
 }
@@ -199,16 +216,46 @@ pub async fn login_as(server: &TestServer, email: &str, password: &str) {
             "password": password,
         }))
         .await;
-    assert_ne!(
+    assert_eq!(
         response.status_code(),
-        StatusCode::FORBIDDEN,
-        "Login should not be blocked by CSRF for {}",
-        email
+        StatusCode::OK,
+        "Login should succeed for {} but got {}: {}",
+        email,
+        response.status_code(),
+        response.text()
     );
-    assert_ne!(
+}
+
+pub fn generate_totp_code(secret: &str, email: &str) -> String {
+    let totp = TOTP::new(
+        Algorithm::SHA1,
+        6,
+        1,
+        30,
+        Secret::Encoded(secret.to_string())
+            .to_bytes()
+            .unwrap(),
+        None,
+        email.to_string(),
+    )
+    .unwrap();
+    totp.generate_current().unwrap()
+}
+
+pub async fn login_as_with_mfa(server: &TestServer, email: &str, password: &str, totp_secret: &str) {
+    login_as(server, email, password).await;
+    let code = generate_totp_code(totp_secret, email);
+    let csrf = get_csrf_token(server).await;
+    let response = server
+        .post("/api/admin/mfa/verify")
+        .add_header("x-csrf-token", &csrf)
+        .json(&serde_json::json!({ "code": code }))
+        .await;
+    assert_eq!(
         response.status_code(),
-        StatusCode::UNAUTHORIZED,
-        "Login should succeed for {}",
-        email
+        StatusCode::OK,
+        "MFA verify should succeed for {}: {}",
+        email,
+        response.text()
     );
 }

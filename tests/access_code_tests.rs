@@ -86,7 +86,8 @@ async fn test_list_access_codes_non_admin_returns_403(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/access-codes").await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "Insufficient permissions");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Insufficient permissions");
 }
 
 #[sqlx::test(migrations = false)]
@@ -214,8 +215,8 @@ async fn test_delete_nonexistent_access_code_returns_error(pool: sqlx::PgPool) {
         .add_header("x-csrf-token", &csrf)
         .await;
 
-    // Handler returns AuthError("Access code not found") → 401
-    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    // Handler returns ValidationError("Access code not found") → 400
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
     let json: serde_json::Value = response.json();
     assert_eq!(json["error"].as_str().unwrap(), "Access code not found");
 }
@@ -242,7 +243,8 @@ async fn test_delete_access_code_non_admin_returns_403(pool: sqlx::PgPool) {
         .await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "Insufficient permissions");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Insufficient permissions");
 
     // Verify code still exists
     let found = access_code::Entity::find_by_id(code.id)

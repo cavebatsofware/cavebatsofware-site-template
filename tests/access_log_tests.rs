@@ -28,7 +28,8 @@ mod common;
 
 use cavebatsofware_site_template::entities::{access_code, access_log, admin_user};
 use common::{
-    build_test_server, create_verified_admin, get_csrf_token, login_as, test_email, TEST_PASSWORD,
+    build_test_server, build_test_server_with, create_verified_admin, get_csrf_token, login_as,
+    test_email, TestServices, TEST_PASSWORD,
 };
 
 use axum::http::StatusCode;
@@ -112,7 +113,8 @@ async fn test_list_logs_viewer_returns_403(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/access-logs").await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "Insufficient permissions");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Insufficient permissions");
 }
 
 #[sqlx::test(migrations = false)]
@@ -241,4 +243,56 @@ async fn test_dashboard_metrics_returns_structure(pool: sqlx::PgPool) {
     assert!(first_code["id"].is_string());
     assert!(first_code["name"].is_string());
     assert!(first_code["count"].is_number());
+}
+
+// ==================== Access log middleware write path ====================
+
+#[sqlx::test(migrations = false)]
+async fn test_access_log_middleware_writes_when_enabled(pool: sqlx::PgPool) {
+    let (server, backend, db) = build_test_server_with(
+        pool,
+        TestServices {
+            enable_logging: Some(true),
+            log_successful_attempts: Some(true),
+            ..Default::default()
+        },
+    )
+    .await;
+    let email = test_email("al-mw-write");
+    create_verified_admin(&backend, &email, TEST_PASSWORD).await;
+    login_as(&server, &email, TEST_PASSWORD).await;
+
+    // Count existing logs before our request
+    let before_count = access_log::Entity::find().count(&db).await.unwrap();
+
+    // Make a request that should be logged (admin route, not health/asset/favicon)
+    server.get("/api/admin/access-codes").await;
+
+    // Verify a log entry was created
+    let after_count = access_log::Entity::find().count(&db).await.unwrap();
+    assert!(
+        after_count > before_count,
+        "Access log middleware should write entries when logging is enabled (before: {}, after: {})",
+        before_count,
+        after_count,
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn test_access_log_middleware_skipped_when_disabled(pool: sqlx::PgPool) {
+    // Default build_test_server has logging disabled
+    let (server, backend, db) = build_test_server(pool).await;
+    let email = test_email("al-mw-skip");
+    create_verified_admin(&backend, &email, TEST_PASSWORD).await;
+    login_as(&server, &email, TEST_PASSWORD).await;
+
+    let before_count = access_log::Entity::find().count(&db).await.unwrap();
+
+    server.get("/api/admin/access-codes").await;
+
+    let after_count = access_log::Entity::find().count(&db).await.unwrap();
+    assert_eq!(
+        before_count, after_count,
+        "Access log middleware should not write entries when logging is disabled"
+    );
 }

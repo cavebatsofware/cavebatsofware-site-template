@@ -66,6 +66,15 @@ fn load_encryption_key() -> Option<Key<Aes256Gcm>> {
     Some(Key::<Aes256Gcm>::from(key))
 }
 
+/// Validate that the encryption key is configured. Call at startup.
+/// Panics with a clear message if TOTP_ENCRYPTION_KEY is missing or invalid.
+pub fn validate_encryption_key() {
+    let _ = ENCRYPTION_KEY.as_ref().expect(
+        "TOTP_ENCRYPTION_KEY environment variable is not set or invalid. \
+        It must be a 64-character hex string (32 bytes).",
+    );
+}
+
 /// Get the encryption key, returning an error if not configured
 fn get_encryption_key() -> Result<&'static Key<Aes256Gcm>> {
     ENCRYPTION_KEY.as_ref().ok_or_else(|| {

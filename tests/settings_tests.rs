@@ -61,7 +61,8 @@ async fn test_get_settings_viewer_returns_403(pool: sqlx::PgPool) {
     let response = server.get("/api/admin/settings").await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
-    assert_eq!(response.text(), "Insufficient permissions");
+    let json: serde_json::Value = response.json();
+    assert_eq!(json["error"].as_str().unwrap(), "Insufficient permissions");
 }
 
 #[sqlx::test(migrations = false)]

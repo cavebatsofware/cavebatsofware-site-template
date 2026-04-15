@@ -24,21 +24,20 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
-use crate::admin::{AdminAuthBackend, AdminUserAuth};
+use crate::admin::{AdminAuthBackend, AdminUserAuth, MFA_VERIFIED_KEY};
 use crate::middleware::AdminUserInfo;
 use axum::{
     body::Body,
     extract::Request,
     http::StatusCode,
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Json, Response},
 };
+use serde_json::json;
 use axum_login::AuthSession;
 use tower_sessions::Session;
 
 pub type AdminAuthSession = AuthSession<AdminAuthBackend>;
-
-const MFA_VERIFIED_KEY: &str = "mfa_verified";
 
 pub async fn require_admin_auth(
     auth_session: AdminAuthSession,
@@ -50,9 +49,9 @@ pub async fn require_admin_auth(
         "require_admin_auth middleware called for: {}",
         request.uri()
     );
-    tracing::debug!("Auth session user present: {}", auth_session.user.is_some());
+    tracing::debug!("Auth session user present: {}", auth_session.user().await.is_some());
 
-    if let Some(user) = auth_session.user {
+    if let Some(user) = auth_session.user().await {
         tracing::debug!("User authenticated: {}", user.email);
 
         // Check if MFA is required but not verified in session
@@ -65,7 +64,7 @@ pub async fn require_admin_auth(
 
             if !mfa_verified {
                 tracing::warn!("MFA required but not verified for user: {}", user.email);
-                return (StatusCode::FORBIDDEN, "MFA verification required").into_response();
+                return (StatusCode::FORBIDDEN, Json(json!({"error": "MFA verification required"}))).into_response();
             }
         }
 
@@ -73,9 +72,13 @@ pub async fn require_admin_auth(
         // Allow access to change-password and logout endpoints
         if user.force_password_change {
             let path = request.uri().path();
-            if path != "/api/admin/change-password" && path != "/api/admin/logout" {
+            if path != "/api/admin/change-password"
+                && path != "/api/admin/logout"
+                && path != "/api/admin/me"
+                && path != "/api/admin/csrf-token"
+            {
                 tracing::warn!("Password change required for user: {}", user.email);
-                return (StatusCode::FORBIDDEN, "Password change required").into_response();
+                return (StatusCode::FORBIDDEN, Json(json!({"error": "Password change required"}))).into_response();
             }
         }
 
@@ -92,7 +95,7 @@ pub async fn require_admin_auth(
         response
     } else {
         tracing::warn!("Authentication required but user not present");
-        (StatusCode::UNAUTHORIZED, "Not authenticated").into_response()
+        (StatusCode::UNAUTHORIZED, Json(json!({"error": "Not authenticated"}))).into_response()
     }
 }
 
@@ -111,11 +114,11 @@ pub async fn require_administrator(request: Request<Body>, next: Next) -> Respon
                 user.email,
                 user.role
             );
-            (StatusCode::FORBIDDEN, "Insufficient permissions").into_response()
+            (StatusCode::FORBIDDEN, Json(json!({"error": "Insufficient permissions"}))).into_response()
         }
         None => {
             tracing::error!("require_administrator called without require_admin_auth");
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Internal server error"}))).into_response()
         }
     }
 }

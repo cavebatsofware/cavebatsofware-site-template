@@ -29,6 +29,7 @@ use crate::{
     entities::{subscriber, Subscriber},
     errors::AppResult,
     security_callbacks::AccessLogEvent,
+    settings::SettingsService,
 };
 use axum::{
     extract::{Query, State},
@@ -44,11 +45,31 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
+/// Validate email format: must have exactly one @, a non-empty local part,
+/// and a domain with at least one dot separating non-empty labels.
+pub fn is_valid_email(email: &str) -> bool {
+    if email.is_empty() || email.len() > 254 {
+        return false;
+    }
+    let parts: Vec<&str> = email.splitn(2, '@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let (local, domain) = (parts[0], parts[1]);
+    if local.is_empty() || local.len() > 64 || domain.is_empty() {
+        return false;
+    }
+    // Domain must have at least one dot with non-empty labels
+    let labels: Vec<&str> = domain.split('.').collect();
+    labels.len() >= 2 && labels.iter().all(|l| !l.is_empty())
+}
+
 #[derive(Clone)]
 pub struct SubscribeState {
     pub email_service: Arc<EmailService>,
     pub callbacks: crate::security_callbacks::AppRateLimitCallbacks,
     pub db: DatabaseConnection,
+    pub settings: SettingsService,
 }
 
 #[derive(Deserialize)]
@@ -78,10 +99,21 @@ async fn subscribe(
     Extension(security_context): Extension<SecurityContext>,
     Json(payload): Json<SubscribeRequest>,
 ) -> AppResult<impl IntoResponse> {
+    // Check if subscriptions feature is enabled
+    if !state.settings.get_subscriptions_enabled().await.unwrap_or(true) {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(SubscribeResponse {
+                success: false,
+                message: "Not found".to_string(),
+            }),
+        ));
+    }
+
     // Validate email
     let email = payload.email.trim().to_lowercase();
 
-    if email.is_empty() || email.len() > 254 || !email.contains('@') || !email.contains('.') {
+    if !is_valid_email(&email) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(SubscribeResponse {
@@ -256,6 +288,16 @@ async fn verify_subscription(
     State(state): State<SubscribeState>,
     Query(query): Query<VerifyQuery>,
 ) -> Result<Redirect, Redirect> {
+    // Check if subscriptions feature is enabled
+    if !state
+        .settings
+        .get_subscriptions_enabled()
+        .await
+        .unwrap_or(true)
+    {
+        return Err(Redirect::to("/?verified=invalid"));
+    }
+
     // Find subscriber with this verification token
     let subscriber = Subscriber::find()
         .filter(subscriber::Column::VerificationToken.eq(&query.token))

@@ -25,13 +25,23 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
+import { useAuth } from "../contexts/AuthContext";
 import { fetchApi } from "../utils/api";
 import "./AccessCodes.css";
 
 function AccessCodes() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Redirect if access codes feature is disabled
+  useEffect(() => {
+    if (user?.features?.access_codes_enabled === false) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, navigate]);
   const [codes, setCodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

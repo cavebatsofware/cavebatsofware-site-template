@@ -37,7 +37,7 @@ pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec
     // Open the DOCX as a ZIP archive
     let cursor = Cursor::new(docx_bytes);
     let mut archive = ZipArchive::new(cursor)
-        .map_err(|e| AppError::AuthError(format!("Failed to open DOCX as ZIP archive: {}", e)))?;
+        .map_err(|e| AppError::InternalError(format!("Failed to open DOCX as ZIP archive: {}", e)))?;
 
     // Create a new ZIP archive for the output
     let output_cursor = Cursor::new(Vec::new());
@@ -46,7 +46,7 @@ pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec
     // Iterate through all files in the ZIP
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| {
-            AppError::AuthError(format!("Failed to read file from DOCX archive: {}", e))
+            AppError::InternalError(format!("Failed to read file from DOCX archive: {}", e))
         })?;
 
         let file_name = file.name().to_string();
@@ -55,7 +55,7 @@ pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec
         // Read file contents
         let mut contents = Vec::new();
         file.read_to_end(&mut contents).map_err(|e| {
-            AppError::AuthError(format!(
+            AppError::InternalError(format!(
                 "Failed to read file '{}' from DOCX: {}",
                 file_name, e
             ))
@@ -64,7 +64,7 @@ pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec
         // If this is the relationships file, perform substitution
         let processed_contents = if is_target_file {
             let xml_string = String::from_utf8(contents.clone()).map_err(|e| {
-                AppError::AuthError(format!("Invalid UTF-8 in DOCX file '{}': {}", file_name, e))
+                AppError::InternalError(format!("Invalid UTF-8 in DOCX file '{}': {}", file_name, e))
             })?;
 
             let processed_xml = xml_string.replace("{{ACCESS_CODE}}", access_code);
@@ -81,14 +81,14 @@ pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec
         zip_writer
             .start_file(file_name.clone(), options)
             .map_err(|e| {
-                AppError::AuthError(format!(
+                AppError::InternalError(format!(
                     "Failed to start file '{}' in output DOCX: {}",
                     file_name, e
                 ))
             })?;
 
         zip_writer.write_all(&processed_contents).map_err(|e| {
-            AppError::AuthError(format!(
+            AppError::InternalError(format!(
                 "Failed to write file '{}' to output DOCX: {}",
                 file_name, e
             ))
@@ -98,7 +98,7 @@ pub fn process_docx_template(docx_bytes: &[u8], access_code: &str) -> Result<Vec
     // Finalize the ZIP archive
     let output_cursor = zip_writer
         .finish()
-        .map_err(|e| AppError::AuthError(format!("Failed to finalize output DOCX: {}", e)))?;
+        .map_err(|e| AppError::InternalError(format!("Failed to finalize output DOCX: {}", e)))?;
 
     Ok(output_cursor.into_inner())
 }

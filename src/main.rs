@@ -37,7 +37,7 @@ use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::
 use tower_sessions::{cookie::SameSite, ExpiredDeletion, Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::PostgresStore;
 
-use cavebatsofware_site_template::{admin, app, database, email, errors, metrics, middleware};
+use cavebatsofware_site_template::{admin, app, crypto, database, email, errors, metrics, middleware};
 
 use app::{AppState, RouterDeps};
 use basic_axum_rate_limit::{
@@ -52,7 +52,7 @@ async fn health_check() -> &'static str {
 }
 
 async fn serve_robots() -> impl IntoResponse {
-    let site_url = env::var("SITE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let site_url = env::var("SITE_URL").expect("SITE_URL environment variable must be set");
     let robots_content = format!(
         "User-agent: *\nAllow: /\n\nSitemap: {}/sitemap-index.xml",
         site_url
@@ -127,6 +127,9 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
+
+    // Validate encryption key is configured before accepting requests
+    crypto::validate_encryption_key();
 
     // Register prometheus metrics
     metrics::register_metrics();
@@ -241,7 +244,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cache_cleanup_limiter = state.rate_limiter.clone();
     let auth_cache_cleanup_limiter = state.auth_rate_limiter.clone();
-    tokio::spawn(async move {
+    let cache_cleanup_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300));
         loop {
             interval.tick().await;
@@ -254,7 +257,7 @@ async fn main() -> anyhow::Result<()> {
     let metrics_limiter = state.rate_limiter.clone();
     let metrics_auth_limiter = state.auth_rate_limiter.clone();
     let metrics_db = state.db.clone();
-    tokio::spawn(async move {
+    let metrics_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         loop {
             interval.tick().await;
@@ -268,7 +271,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "1".to_string())
         .parse::<i64>()
         .unwrap_or(1);
-    tokio::spawn(async move {
+    let db_cleanup_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
         loop {
             interval.tick().await;
@@ -306,8 +309,20 @@ async fn main() -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
+    .with_graceful_shutdown(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C handler");
+        tracing::info!("Shutdown signal received, stopping server...");
+    })
     .await
     .map_err(|e| anyhow::anyhow!("Server error: {}", e))?;
+
+    // Clean up background tasks
+    tracing::info!("Shutting down background tasks...");
+    cache_cleanup_task.abort();
+    metrics_task.abort();
+    db_cleanup_task.abort();
 
     Ok(())
 }

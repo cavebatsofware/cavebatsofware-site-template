@@ -181,13 +181,15 @@ pub async fn refresh_system_metrics(
 /// Only accessible from loopback interfaces (127.0.0.1 or ::1).
 pub async fn metrics_handler(
     connect_info: axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
 ) -> axum::response::Response {
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
 
     let peer_ip = connect_info.0.ip();
 
-    if !peer_ip.is_loopback() {
+    // Reject if not loopback or if request came through a reverse proxy
+    if !peer_ip.is_loopback() || headers.contains_key("x-forwarded-for") {
         return (
             StatusCode::FORBIDDEN,
             "Metrics only available from localhost",

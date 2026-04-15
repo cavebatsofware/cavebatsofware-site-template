@@ -28,14 +28,17 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Chart from "react-apexcharts";
 import Layout from "../components/Layout";
+import { useAuth } from "../contexts/AuthContext";
 import { fetchApi } from "../utils/api";
 import "./Dashboard.css";
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const accessCodesEnabled = user?.features?.access_codes_enabled !== false;
 
   useEffect(() => {
     fetchMetrics();
@@ -221,28 +224,32 @@ function Dashboard() {
               />
             </div>
 
-            <div className="chart-container">
-              <Chart
-                options={recentCodesChartOptions}
-                series={recentCodesChartSeries}
-                type="bar"
-                height={350}
-              />
-            </div>
+            {accessCodesEnabled && (
+              <div className="chart-container">
+                <Chart
+                  options={recentCodesChartOptions}
+                  series={recentCodesChartSeries}
+                  type="bar"
+                  height={350}
+                />
+              </div>
+            )}
           </div>
         )}
 
         <div className="feature-grid">
-          <div className="feature-card">
-            <h3>Access Codes</h3>
-            <p>Manage and edit access codes for the document site.</p>
-            <button
-              className="btn-feature"
-              onClick={() => navigate("/access-codes")}
-            >
-              Manage Codes
-            </button>
-          </div>
+          {accessCodesEnabled && (
+            <div className="feature-card">
+              <h3>Access Codes</h3>
+              <p>Manage and edit access codes for the document site.</p>
+              <button
+                className="btn-feature"
+                onClick={() => navigate("/access-codes")}
+              >
+                Manage Codes
+              </button>
+            </div>
+          )}
 
           <div className="feature-card">
             <h3>Access Logs</h3>

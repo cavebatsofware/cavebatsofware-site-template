@@ -24,7 +24,10 @@
  *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
  */
 
-use crate::{email::EmailService, errors::AppResult, security_callbacks::AccessLogEvent};
+use crate::{
+    email::EmailService, errors::AppResult, security_callbacks::AccessLogEvent,
+    settings::SettingsService,
+};
 use axum::{
     extract::State, http::StatusCode, response::IntoResponse, routing::post, Extension, Json,
     Router,
@@ -37,6 +40,7 @@ use std::sync::Arc;
 pub struct ContactState {
     pub email_service: Arc<EmailService>,
     pub callbacks: crate::security_callbacks::AppRateLimitCallbacks,
+    pub settings: SettingsService,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +66,17 @@ async fn submit_contact_form(
     Extension(security_context): Extension<SecurityContext>,
     Json(payload): Json<ContactFormRequest>,
 ) -> AppResult<impl IntoResponse> {
+    // Check if contact form feature is enabled
+    if !state.settings.get_contact_form_enabled().await.unwrap_or(true) {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(ContactFormResponse {
+                success: false,
+                message: "Not found".to_string(),
+            }),
+        ));
+    }
+
     // Validate input lengths
     if payload.name.trim().is_empty()
         || payload.name.len() > 100
@@ -81,8 +96,8 @@ async fn submit_contact_form(
         ));
     }
 
-    // Basic email validation
-    if !payload.email.contains('@') || !payload.email.contains('.') {
+    // Email validation
+    if !crate::subscribe::is_valid_email(&payload.email) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(ContactFormResponse {

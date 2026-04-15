@@ -15,7 +15,7 @@ COPY admin-frontend ./admin-frontend
 RUN npm run build
 
 # Rust build stage
-FROM rust:alpine3.22 AS builder
+FROM rust:alpine3.23.3 AS builder
 
 WORKDIR /app
 
@@ -36,7 +36,7 @@ COPY src ./src
 RUN cargo build --release
 
 # Runtime stage
-FROM alpine:3.23
+FROM alpine:3.23.3
 
 WORKDIR /app
 

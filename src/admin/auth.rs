@@ -32,8 +32,8 @@ use argon2::{
     Argon2,
 };
 use axum_login::{AuthUser, AuthnBackend, UserId};
+use rand::RngExt;
 use chrono::Utc;
-use rand::Rng;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
     Set,
@@ -191,6 +191,11 @@ impl AdminAuthBackend {
         } else {
             None
         });
+        // Clear lockout fields when disabling MFA to avoid stale state on re-enrollment
+        if !totp_enabled {
+            admin_active.mfa_failed_attempts = Set(Some(0));
+            admin_active.mfa_locked_until = Set(None);
+        }
         admin_active.updated_at = Set(Utc::now().into());
 
         let updated = admin_active.update(&self.db).await?;
@@ -461,7 +466,9 @@ impl AdminAuthBackend {
         let mut admin_active: admin_user::ActiveModel = admin.into();
         admin_active.password_hash = Set(password_hash);
         admin_active.force_password_change = Set(false);
-        // Note: We keep the token until expiry for cooldown purposes
+        // Clear token after use (single-use). Cooldown still works via
+        // password_reset_token_expires_at which remains set.
+        admin_active.password_reset_token = Set(None);
         admin_active.updated_at = Set(Utc::now().into());
 
         let updated = admin_active.update(&self.db).await?;
@@ -525,7 +532,7 @@ impl AdminAuthBackend {
                 a.verification_token
                     .as_deref()
                     .and_then(|encrypted| decrypt_token(encrypted).ok())
-                    .map_or(false, |decrypted| decrypted == token)
+                    .is_some_and(|decrypted| decrypted == token)
             })
             .ok_or_else(|| anyhow::anyhow!("Invalid verification token"))?;
 

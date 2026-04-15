@@ -137,4 +137,25 @@ impl S3Service {
         tracing::info!("Successfully uploaded {} to S3", key);
         Ok(())
     }
+
+    /// Delete a file from S3 at path: {code}/{filename}
+    pub async fn delete_file(&self, code: &str, filename: &str) -> Result<()> {
+        let key = format!("{}/{}", code, filename);
+
+        tracing::info!(
+            "Deleting from S3: bucket={}, key={}",
+            self.bucket_name,
+            key
+        );
+
+        self.client
+            .delete_object()
+            .bucket(&self.bucket_name)
+            .key(&key)
+            .send()
+            .await?;
+
+        tracing::info!("Successfully deleted {} from S3", key);
+        Ok(())
+    }
 }

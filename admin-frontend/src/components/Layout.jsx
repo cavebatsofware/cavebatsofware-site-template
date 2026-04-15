@@ -53,12 +53,14 @@ function Layout({ children }) {
               >
                 Dashboard
               </button>
-              <button
-                className={`nav-link ${isActive("/access-codes") ? "active" : ""}`}
-                onClick={() => navigate("/access-codes")}
-              >
-                Access Codes
-              </button>
+              {user?.features?.access_codes_enabled !== false && (
+                <button
+                  className={`nav-link ${isActive("/access-codes") ? "active" : ""}`}
+                  onClick={() => navigate("/access-codes")}
+                >
+                  Access Codes
+                </button>
+              )}
               <button
                 className={`nav-link ${isActive("/access-logs") ? "active" : ""}`}
                 onClick={() => navigate("/access-logs")}

@@ -184,6 +184,25 @@ pub fn mock_s3_put_err() -> S3Client {
     mock_client!(aws_sdk_s3, RuleMode::Sequential, [&rule])
 }
 
+/// Build a mocked S3 client that accepts PutObject and DeleteObject.
+/// Suitable as a default for tests that don't need specific S3 behavior.
+pub fn mock_s3_default(spy: &S3Spy) -> S3Client {
+    use aws_sdk_s3::operation::delete_object::{DeleteObjectInput, DeleteObjectOutput};
+
+    let spy_put = spy.clone();
+    let put_rule = mock!(S3Client::put_object).then_compute_output(move |input: &PutObjectInput| {
+        spy_put.push_upload(extract_put(input));
+        PutObjectOutput::builder().build()
+    });
+
+    let delete_rule =
+        mock!(S3Client::delete_object).then_compute_output(move |_input: &DeleteObjectInput| {
+            DeleteObjectOutput::builder().build()
+        });
+
+    mock_client!(aws_sdk_s3, RuleMode::MatchAny, [&put_rule, &delete_rule])
+}
+
 /// Convenience: wrap any mock client into an `S3Service`.
 pub fn build_test_s3_service(client: S3Client) -> S3Service {
     S3Service::with_client(client, TEST_BUCKET.to_string())

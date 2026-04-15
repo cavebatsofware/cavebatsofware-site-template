@@ -30,7 +30,7 @@ use crate::errors::{AppError, AppResult};
 use crate::middleware::AuthenticatedUser;
 use crate::s3::S3Service;
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{DefaultBodyLimit, Multipart, Path, State},
     http::StatusCode,
     response::Json,
     routing::{delete, get},
@@ -58,12 +58,13 @@ pub fn access_code_routes() -> Router<AccessCodeState> {
             get(list_codes).post(create_code_multipart),
         )
         .route("/api/admin/access-codes/{id}", delete(delete_code))
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024)) // 20 MB
 }
 
 /// Replace {{ACCESS_CODE}} placeholder in HTML content with the actual access code
 fn process_html_template(html_content: &[u8], access_code: &str) -> Result<Vec<u8>, AppError> {
     let html_string = String::from_utf8(html_content.to_vec())
-        .map_err(|e| AppError::AuthError(format!("Invalid UTF-8 in HTML file: {}", e)))?;
+        .map_err(|e| AppError::ValidationError(format!("Invalid UTF-8 in HTML file: {}", e)))?;
 
     let processed_html = html_string.replace("{{ACCESS_CODE}}", access_code);
 
@@ -137,42 +138,42 @@ async fn create_code_multipart(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| AppError::AuthError(format!("Failed to parse multipart form: {}", e)))?
+        .map_err(|e| AppError::ValidationError(format!("Failed to parse multipart form: {}", e)))?
     {
         let field_name = field.name().unwrap_or("").to_string();
 
         match field_name.as_str() {
             "code" => {
                 code_value = field.text().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read code field: {}", e))
+                    AppError::ValidationError(format!("Failed to read code field: {}", e))
                 })?;
             }
             "name" => {
                 name_value = field.text().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read name field: {}", e))
+                    AppError::ValidationError(format!("Failed to read name field: {}", e))
                 })?;
             }
             "description" => {
                 let text = field.text().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read description field: {}", e))
+                    AppError::ValidationError(format!("Failed to read description field: {}", e))
                 })?;
                 description_value = if text.is_empty() { None } else { Some(text) };
             }
             "download_filename" => {
                 let text = field.text().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read download_filename field: {}", e))
+                    AppError::ValidationError(format!("Failed to read download_filename field: {}", e))
                 })?;
                 download_filename_value = if text.is_empty() { None } else { Some(text) };
             }
             "expires_at" => {
                 let text = field.text().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read expires_at field: {}", e))
+                    AppError::ValidationError(format!("Failed to read expires_at field: {}", e))
                 })?;
                 expires_at_value = if text.is_empty() { None } else { Some(text) };
             }
             "index_html" => {
                 let data = field.bytes().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read index.html file: {}", e))
+                    AppError::ValidationError(format!("Failed to read index.html file: {}", e))
                 })?;
                 if !data.is_empty() {
                     index_html = Some(data.to_vec());
@@ -180,7 +181,7 @@ async fn create_code_multipart(
             }
             "document_docx" => {
                 let data = field.bytes().await.map_err(|e| {
-                    AppError::AuthError(format!("Failed to read Document.docx file: {}", e))
+                    AppError::ValidationError(format!("Failed to read Document.docx file: {}", e))
                 })?;
                 if !data.is_empty() {
                     document_docx = Some(data.to_vec());
@@ -195,18 +196,42 @@ async fn create_code_multipart(
 
     // Validate required fields
     if code_value.trim().is_empty() {
-        return Err(AppError::AuthError(
+        return Err(AppError::ValidationError(
             "Access code cannot be empty".to_string(),
         ));
     }
 
+    // Validate access code format: alphanumeric or hyphens only
+    if !code_value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(AppError::ValidationError(
+            "Access code must contain only alphanumeric characters or hyphens"
+                .to_string(),
+        ));
+    }
+
     if name_value.trim().is_empty() {
-        return Err(AppError::AuthError("Name cannot be empty".to_string()));
+        return Err(AppError::ValidationError("Name cannot be empty".to_string()));
+    }
+
+    // Validate download filename format if provided
+    if let Some(ref filename) = download_filename_value {
+        if !filename
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(AppError::ValidationError(
+                "Download filename must contain only alphanumeric characters, hyphens, and underscores"
+                    .to_string(),
+            ));
+        }
     }
 
     // Validate that both files are provided
     if index_html.is_none() || document_docx.is_none() {
-        return Err(AppError::AuthError(
+        return Err(AppError::ValidationError(
             "Both index.html and Document.docx files are required".to_string(),
         ));
     }
@@ -218,7 +243,7 @@ async fn create_code_multipart(
         .await?;
 
     if existing.is_some() {
-        return Err(AppError::AuthError(
+        return Err(AppError::ValidationError(
             "Access code already exists".to_string(),
         ));
     }
@@ -230,12 +255,12 @@ async fn create_code_multipart(
             // Set time to end of day (23:59:59) in UTC
             let naive_datetime = naive_date
                 .and_hms_opt(23, 59, 59)
-                .ok_or_else(|| AppError::AuthError("Invalid date - cannot set time".to_string()))?;
+                .ok_or_else(|| AppError::ValidationError("Invalid date - cannot set time".to_string()))?;
             Some(Utc.from_utc_datetime(&naive_datetime).into())
         } else {
             // Fallback: try RFC3339 format for backward compatibility
             Some(chrono::DateTime::parse_from_rfc3339(&exp_str).map_err(|_| {
-                AppError::AuthError("Invalid expiration date format. Use YYYY-MM-DD".to_string())
+                AppError::ValidationError("Invalid expiration date format. Use YYYY-MM-DD".to_string())
             })?)
         }
     } else {
@@ -247,9 +272,9 @@ async fn create_code_multipart(
 
     // ensure both files are Some
     let index_html_data =
-        index_html.ok_or_else(|| AppError::AuthError("index.html file is required".to_string()))?;
+        index_html.ok_or_else(|| AppError::ValidationError("index.html file is required".to_string()))?;
     let document_docx_data = document_docx
-        .ok_or_else(|| AppError::AuthError("Document.docx file is required".to_string()))?;
+        .ok_or_else(|| AppError::ValidationError("Document.docx file is required".to_string()))?;
 
     let processed_index_html = process_html_template(&index_html_data, &code_value)?;
     let processed_document_docx = process_docx_template(&document_docx_data, &code_value)?;
@@ -264,13 +289,13 @@ async fn create_code_multipart(
         .s3
         .upload_file(&code_value, "index.html", processed_index_html)
         .await
-        .map_err(|e| AppError::AuthError(format!("Failed to upload index.html to S3: {}", e)))?;
+        .map_err(|e| AppError::InternalError(format!("Failed to upload index.html to S3: {}", e)))?;
 
     state
         .s3
         .upload_file(&code_value, "Document.docx", processed_document_docx)
         .await
-        .map_err(|e| AppError::AuthError(format!("Failed to upload Document.docx to S3: {}", e)))?;
+        .map_err(|e| AppError::InternalError(format!("Failed to upload Document.docx to S3: {}", e)))?;
 
     // Create database entry after successful uploads
     let new_code = access_code::ActiveModel {
@@ -286,7 +311,15 @@ async fn create_code_multipart(
         last_used_at: Set(None),
     };
 
-    let result = new_code.insert(&state.db).await?;
+    let result = match new_code.insert(&state.db).await {
+        Ok(r) => r,
+        Err(e) => {
+            // Clean up orphaned S3 objects on DB insert failure
+            let _ = state.s3.delete_file(&code_value, "index.html").await;
+            let _ = state.s3.delete_file(&code_value, "Document.docx").await;
+            return Err(e.into());
+        }
+    };
 
     tracing::info!(
         "Access code created successfully: {} by user {}",
@@ -305,10 +338,20 @@ async fn delete_code(
     let code = AccessCode::find_by_id(id)
         .one(&state.db)
         .await?
-        .ok_or_else(|| AppError::AuthError("Access code not found".to_string()))?;
+        .ok_or_else(|| AppError::ValidationError("Access code not found".to_string()))?;
+
+    let code_value = code.code.clone();
 
     let active_model: access_code::ActiveModel = code.into();
     active_model.delete(&state.db).await?;
+
+    // Clean up S3 objects (best-effort — don't fail the delete if S3 cleanup fails)
+    if let Err(e) = state.s3.delete_file(&code_value, "index.html").await {
+        tracing::warn!("Failed to delete index.html from S3 for code {}: {}", code_value, e);
+    }
+    if let Err(e) = state.s3.delete_file(&code_value, "Document.docx").await {
+        tracing::warn!("Failed to delete Document.docx from S3 for code {}: {}", code_value, e);
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }

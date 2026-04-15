@@ -26,10 +26,12 @@
 
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
+import { useAuth } from "../contexts/AuthContext";
 import { fetchApi } from "../utils/api";
 import "./Settings.css";
 
 function Settings() {
+  const { refreshUser } = useAuth();
   const [settings, setSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -91,6 +93,9 @@ function Settings() {
           s.id === setting.id ? { ...s, value: newValue } : s,
         ),
       );
+
+      // Refresh user data so feature flags update in nav/UI immediately
+      refreshUser();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -163,6 +168,9 @@ function Settings() {
   function getSettingLabel(key) {
     const labels = {
       admin_registration_enabled: "Admin Registration",
+      access_codes_enabled: "Access Codes",
+      contact_form_enabled: "Contact Form",
+      subscriptions_enabled: "Newsletter Subscriptions",
       site_name: "Site Name",
       site_domain: "Site Domain",
       contact_email: "Contact Email",
@@ -175,6 +183,11 @@ function Settings() {
     const descriptions = {
       admin_registration_enabled:
         "Allow new administrators to register accounts via the registration page",
+      access_codes_enabled:
+        "Enable code-gated document access for the public site",
+      contact_form_enabled: "Enable the public contact form endpoint",
+      subscriptions_enabled:
+        "Enable the public newsletter subscription endpoint",
       site_name: "The name of your website displayed in emails and pages",
       site_domain: "The domain name of your website (e.g., example.com)",
       contact_email: "Email address for contact form submissions",

@@ -113,7 +113,8 @@ fn extract_email(input: &SendEmailInput) -> CapturedEmail {
 }
 
 /// Build a mocked SES client whose `send_email` always succeeds and pushes
-/// the captured input into `spy`.
+/// the captured input into `spy`. Uses `Sequential` rule mode — suitable for
+/// tests that send exactly one email.
 pub fn mock_ses_ok(spy: &EmailSpy) -> SesClient {
     let spy_clone = spy.clone();
     let rule = mock!(SesClient::send_email)
@@ -123,6 +124,31 @@ pub fn mock_ses_ok(spy: &EmailSpy) -> SesClient {
         });
 
     mock_client!(aws_sdk_sesv2, RuleMode::Sequential, [&rule])
+}
+
+/// Build a mocked SES client that succeeds for any number of `send_email`
+/// calls. Uses `MatchAny` rule mode — suitable for tests that send multiple
+/// emails (e.g. registration + password reset).
+pub fn mock_ses_ok_any(spy: &EmailSpy) -> SesClient {
+    let spy_clone = spy.clone();
+    let rule = mock!(SesClient::send_email)
+        .then_compute_output(move |input: &SendEmailInput| {
+            spy_clone.push(extract_email(input));
+            SendEmailOutput::builder().message_id("mock-message-id").build()
+        });
+
+    mock_client!(aws_sdk_sesv2, RuleMode::MatchAny, [&rule])
+}
+
+/// Convenience: build an `Arc<EmailService>` wired to a successful mock SES
+/// client that handles multiple sends, plus the given spy.
+pub fn build_test_email_service_any(spy: &EmailSpy, db: &DatabaseConnection) -> Arc<EmailService> {
+    let client = mock_ses_ok_any(spy);
+    Arc::new(EmailService::with_client(
+        client,
+        SettingsService::new(db.clone()),
+        "http://localhost:3000".to_string(),
+    ))
 }
 
 /// Build a mocked SES client whose `send_email` always fails with a generic

@@ -44,7 +44,7 @@ use uuid::Uuid;
 const OIDC_STATE_KEY: &str = "oidc_csrf_state";
 const OIDC_NONCE_KEY: &str = "oidc_nonce";
 const OIDC_PKCE_VERIFIER_KEY: &str = "oidc_pkce_verifier";
-const MFA_VERIFIED_KEY: &str = "mfa_verified";
+use super::MFA_VERIFIED_KEY;
 
 type OidcAuthSession = AuthSession<AdminAuthBackend>;
 
@@ -88,7 +88,7 @@ pub struct OidcCallbackParams {
 /// Handles the redirect back from Keycloak after authentication
 pub async fn oidc_callback(
     State(state): State<OidcState>,
-    mut auth_session: OidcAuthSession,
+    auth_session: OidcAuthSession,
     session: Session,
     Query(params): Query<OidcCallbackParams>,
 ) -> AppResult<Redirect> {

@@ -1,6 +1,6 @@
 [package]
 name = "cavebatsofware-site-template"
-version = "0.26.2"
+version = "1.26.4"
 edition = "2021"
 
 [features]
@@ -8,43 +8,43 @@ default = []
 e2e_testing = []
 
 [dependencies]
-basic-axum-rate-limit = "0.2.2"
-axum-tower-sessions-csrf = "0.1.1"
-axum = { version = "0.8.8", features = ["multipart"] }
-tokio = { version = "1.50.0", features = ["full"] }
+basic-axum-rate-limit = "0.2.3"
+axum-tower-sessions-csrf = "0.1.3"
+axum = { version = "0.8.9", features = ["multipart"] }
+tokio = { version = "1.52.0", features = ["full"] }
 tower = "0.5.3"
 tower-http = { version = "0.6.8", features = ["fs", "trace", "set-header"] }
 tracing = "0.1.44"
-tracing-subscriber = "0.3.22"
+tracing-subscriber = "0.3.23"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 anyhow = "1.0.102"
 dotenvy = "0.15.7"
-sea-orm = { version = "1.1.19", features = ["sqlx-postgres", "runtime-tokio-rustls", "with-time", "with-uuid", "macros"] }
-sea-orm-migration = "1.1.19"
+sea-orm = { version = "1.1.20", features = ["sqlx-postgres", "runtime-tokio-rustls", "with-time", "with-uuid", "macros"] }
+sea-orm-migration = "1.1.20"
 chrono = { version = "0.4.44", features = ["serde"] }
-uuid = { version = "1.22.0", features = ["v4", "serde"] }
+uuid = { version = "1.23.0", features = ["v4", "serde"] }
 thiserror = "2.0.18"
 argon2 = "0.5.3"
 blake2 = "0.10.6"
-rand = "0.9.2"
+rand = "0.10.1"
 hex = "0.4.3"
 async-trait = "0.1.89"
 # Admin authentication dependencies
-axum-login = "0.18"
-tower-sessions = "0.14"
-tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
+axum-login = { git = "https://github.com/cavebatsofware/axum-login.git" }
+tower-sessions = "0.15"
+tower-sessions-sqlx-store = { git = "https://github.com/cavebatsofware/tower-sessions-stores.git", features = ["postgres"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres"] }
 # AWS services
 aws-config = "1.8.15"
-aws-sdk-sesv2 = "1.115.0"
-aws-sdk-s3 = "1.125.0"
+aws-sdk-sesv2 = "1.117.0"
+aws-sdk-s3 = "1.129.0"
 # Time for session expiry
 time = "0.3.47"
 # DOCX handling (ZIP archive manipulation)
-zip = "8.2.0"
+zip = "8.5.1"
 # TOTP for MFA
-totp-rs = { version = "5.7", features = ["qr", "gen_secret"] }
+totp-rs = { version = "5.7.1", features = ["qr", "gen_secret"] }
 # Security hardening
 aes-gcm = { version = "0.10.3" }
 base64 = { version = "0.22.1" }
@@ -55,13 +55,12 @@ openidconnect = "4.0.1"
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls"] }
 url = "2.5.8"
 
-
 [dev-dependencies]
 cavebatsofware-site-template = { path = ".", features = ["e2e_testing"] }
 sqlx = { version = "0.8.6", features = ["migrate"] }
-axum-test = "18.4.1"
-tower = { version = "0.5.2", features = ["util"] }
-totp-rs = { version = "5.7", features = ["gen_secret"] }
+axum-test = "20.0.0"
+tower = { version = "0.5.3", features = ["util"] }
+totp-rs = { version = "5.7.1", features = ["gen_secret"] }
 wiremock = "0.6.5"
 aws-smithy-mocks = "0.2.6"
 aws-smithy-runtime-api = "1.11.6"
@@ -69,4 +68,3 @@ aws-smithy-types = "1.4.7"
 aws-sdk-sesv2 = { version = "1.115.0", features = ["test-util"] }
 aws-sdk-s3 = { version = "1.125.0", features = ["test-util"] }
 rsa = { version = "0.9.10", features = ["pem"] }
-rand_core = { version = "0.6", features = ["std"] }

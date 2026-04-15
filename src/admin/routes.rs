@@ -47,7 +47,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_sessions::Session;
 
-const MFA_VERIFIED_KEY: &str = "mfa_verified";
+use super::MFA_VERIFIED_KEY;
 
 pub type AdminAuthSession = AuthSession<AdminAuthBackend>;
 
@@ -74,6 +74,8 @@ pub fn admin_api_routes(
             post(forgot_password_verify_mfa),
         )
         .route("/api/admin/reset-password", post(reset_password))
+        .route("/api/admin/change-password", post(change_password))
+        .route("/api/admin/mfa/disable", post(mfa_disable))
         .layer(from_fn_with_state(auth_rate_limiter, rate_limit_middleware));
 
     // Routes that don't need stricter rate limiting
@@ -83,10 +85,8 @@ pub fn admin_api_routes(
         .route("/api/admin/me", get(me))
         .route("/api/admin/csrf-token", get(get_csrf_token))
         .route("/api/admin/auth-config", get(auth_config))
-        .route("/api/admin/change-password", post(change_password))
         .route("/api/admin/mfa/setup", post(mfa_setup))
-        .route("/api/admin/mfa/confirm-setup", post(mfa_confirm_setup))
-        .route("/api/admin/mfa/disable", post(mfa_disable));
+        .route("/api/admin/mfa/confirm-setup", post(mfa_confirm_setup));
 
     rate_limited_routes.merge(standard_routes)
 }
@@ -112,7 +112,7 @@ async fn register(
     // Check if registration is enabled
     let registration_enabled = state
         .settings
-        .get_bool("admin_registration_enabled", Some("system"), None)
+        .get_admin_registration_enabled()
         .await
         .unwrap_or(false);
 
@@ -150,7 +150,7 @@ async fn register(
 
 async fn login(
     State(state): State<AdminState>,
-    mut auth_session: AdminAuthSession,
+    auth_session: AdminAuthSession,
     Json(creds): Json<Credentials>,
 ) -> AppResult<Json<UserResponse>> {
     require_local_auth(state.oidc_enabled)?;
@@ -169,6 +169,12 @@ async fn login(
     // If MFA is enabled but not yet verified, indicate that MFA is required
     let mfa_required = user.totp_enabled && !user.mfa_verified;
 
+    let features = FeatureFlags {
+        access_codes_enabled: state.settings.get_access_codes_enabled().await.unwrap_or(true),
+        contact_form_enabled: state.settings.get_contact_form_enabled().await.unwrap_or(true),
+        subscriptions_enabled: state.settings.get_subscriptions_enabled().await.unwrap_or(true),
+    };
+
     Ok(Json(UserResponse {
         id: user.id,
         email: user.email,
@@ -178,10 +184,11 @@ async fn login(
         active: user.active,
         force_password_change: user.force_password_change,
         role: user.role,
+        features,
     }))
 }
 
-async fn logout(mut auth_session: AdminAuthSession) -> AppResult<StatusCode> {
+async fn logout(auth_session: AdminAuthSession) -> AppResult<StatusCode> {
     auth_session
         .logout()
         .await
@@ -218,6 +225,13 @@ async fn verify_email(
 }
 
 #[derive(Serialize)]
+struct FeatureFlags {
+    access_codes_enabled: bool,
+    contact_form_enabled: bool,
+    subscriptions_enabled: bool,
+}
+
+#[derive(Serialize)]
 struct UserResponse {
     id: uuid::Uuid,
     email: String,
@@ -227,11 +241,17 @@ struct UserResponse {
     active: bool,
     force_password_change: bool,
     role: String,
+    features: FeatureFlags,
 }
 
-async fn me(auth_session: AdminAuthSession, session: Session) -> AppResult<Json<UserResponse>> {
+async fn me(
+    State(state): State<AdminState>,
+    auth_session: AdminAuthSession,
+    session: Session,
+) -> AppResult<Json<UserResponse>> {
     let user = auth_session
-        .user
+        .user()
+        .await
         .ok_or_else(|| AppError::AuthError("Not authenticated".to_string()))?;
 
     // Check session for MFA verified status
@@ -244,6 +264,12 @@ async fn me(auth_session: AdminAuthSession, session: Session) -> AppResult<Json<
     // MFA is required if TOTP is enabled and not yet verified in this session
     let mfa_required = user.totp_enabled && !mfa_verified;
 
+    let features = FeatureFlags {
+        access_codes_enabled: state.settings.get_access_codes_enabled().await.unwrap_or(true),
+        contact_form_enabled: state.settings.get_contact_form_enabled().await.unwrap_or(true),
+        subscriptions_enabled: state.settings.get_subscriptions_enabled().await.unwrap_or(true),
+    };
+
     Ok(Json(UserResponse {
         id: user.id,
         email: user.email,
@@ -253,6 +279,7 @@ async fn me(auth_session: AdminAuthSession, session: Session) -> AppResult<Json<
         active: user.active,
         force_password_change: user.force_password_change,
         role: user.role,
+        features,
     }))
 }
 
@@ -307,10 +334,10 @@ fn require_local_auth(oidc_enabled: bool) -> AppResult<()> {
 // ==================== MFA Endpoints ====================
 
 /// Helper to get authenticated user, returning error if not logged in
-fn get_authenticated_user(auth_session: &AdminAuthSession) -> AppResult<super::AdminUserAuth> {
+async fn get_authenticated_user(auth_session: &AdminAuthSession) -> AppResult<super::AdminUserAuth> {
     auth_session
-        .user
-        .clone()
+        .user()
+        .await
         .ok_or_else(|| AppError::AuthError("Not authenticated".to_string()))
 }
 
@@ -328,7 +355,7 @@ async fn mfa_setup(
     auth_session: AdminAuthSession,
 ) -> AppResult<Json<MfaSetupResponse>> {
     require_local_auth(state.oidc_enabled)?;
-    let user = get_authenticated_user(&auth_session)?;
+    let user = get_authenticated_user(&auth_session).await?;
 
     // Don't allow setup if MFA is already pending verification
     if user.totp_enabled && !user.mfa_verified {
@@ -367,7 +394,7 @@ async fn mfa_confirm_setup(
     Json(req): Json<MfaConfirmRequest>,
 ) -> AppResult<Json<MfaConfirmResponse>> {
     require_local_auth(state.oidc_enabled)?;
-    let user = get_authenticated_user(&auth_session)?;
+    let user = get_authenticated_user(&auth_session).await?;
 
     // Verify and save the secret in one step
     // First verify the code is correct
@@ -417,7 +444,7 @@ async fn mfa_verify(
     Json(req): Json<MfaVerifyRequest>,
 ) -> AppResult<Json<MfaVerifyResponse>> {
     require_local_auth(state.oidc_enabled)?;
-    let user = get_authenticated_user(&auth_session)?;
+    let user = get_authenticated_user(&auth_session).await?;
 
     // Must have MFA enabled
     if !user.totp_enabled {
@@ -425,17 +452,17 @@ async fn mfa_verify(
     }
 
     // Check if account is locked out
-    let is_locked = state
-        .auth_backend
-        .is_mfa_locked(user.id)
-        .await
-        .map_err(|e| AppError::AuthError(e.to_string()))?;
 
-    if is_locked {
-        return Err(AppError::AuthError(
-            "Account is temporarily locked due to too many failed MFA attempts. Please try again later.".to_string(),
-        ));
-    }
+
+
+
+
+
+
+
+
+
+
 
     // Check if already verified in this session
     let already_verified = session
@@ -456,7 +483,8 @@ async fn mfa_verify(
         .map_err(|e| AppError::AuthError(e.to_string()))?
         .ok_or_else(|| AppError::AuthError("TOTP secret not configured".to_string()))?;
 
-    // Verify the code
+
+    // Verify the code first (before checking lockout status)
     let is_valid = totp::verify_code(&totp_secret, &req.code, &user.email)
         .map_err(|e| AppError::AuthError(format!("Failed to verify code: {}", e)))?;
 
@@ -482,7 +510,8 @@ async fn mfa_verify(
         return Err(AppError::AuthError("Invalid verification code".to_string()));
     }
 
-    // Reset failed attempts on success
+
+    // Code is valid - reset any failed attempts and mark as verified
     state
         .auth_backend
         .reset_mfa_failures(user.id)
@@ -521,7 +550,7 @@ async fn mfa_disable(
     Json(req): Json<MfaDisableRequest>,
 ) -> AppResult<Json<MfaDisableResponse>> {
     require_local_auth(state.oidc_enabled)?;
-    let user = get_authenticated_user(&auth_session)?;
+    let user = get_authenticated_user(&auth_session).await?;
 
     // Must be fully authenticated - check session for MFA verification
     let mfa_verified = session
@@ -592,7 +621,7 @@ async fn change_password(
     Json(req): Json<ChangePasswordRequest>,
 ) -> AppResult<Json<ChangePasswordResponse>> {
     require_local_auth(state.oidc_enabled)?;
-    let user = get_authenticated_user(&auth_session)?;
+    let user = get_authenticated_user(&auth_session).await?;
 
     // Must be fully authenticated (MFA verified if enabled)
     let mfa_verified = session
@@ -652,6 +681,7 @@ async fn change_password(
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct ForgotPasswordRequest {
     email: String,
 }
@@ -665,30 +695,14 @@ struct ForgotPasswordResponse {
 /// Request password reset (always returns requires_mfa: true for enumeration protection)
 async fn forgot_password(
     State(state): State<AdminState>,
-    Json(req): Json<ForgotPasswordRequest>,
+    Json(_req): Json<ForgotPasswordRequest>,
 ) -> AppResult<Json<ForgotPasswordResponse>> {
     require_local_auth(state.oidc_enabled)?;
 
-    // Check if user exists (we'll handle this silently for enumeration protection)
-    let admin = state
-        .auth_backend
-        .get_admin_by_email(&req.email)
-        .await
-        .map_err(|e| AppError::AuthError(e.to_string()))?;
-
-    // If user exists, check for cooldown
-    if let Some(ref user) = admin {
-        if let Some(expires_at) = user.password_reset_token_expires_at {
-            if chrono::Utc::now() < expires_at.with_timezone(&chrono::Utc) {
-                return Err(AppError::AuthError(
-                    "Password reset already requested. Please wait for the current request to expire.".to_string(),
-                ));
-            }
-        }
-    }
-
-    // Always return requires_mfa: true regardless of whether user exists or has MFA
-    // This prevents email enumeration attacks
+    // Always return the same response regardless of whether user exists or has an active
+    // cooldown. This prevents email enumeration via response differences.
+    // The actual cooldown enforcement happens in create_password_reset_token,
+    // which checks token expiry before creating a new one.
     Ok(Json(ForgotPasswordResponse {
         requires_mfa: true,
         message: "Please enter your MFA code to continue".to_string(),
@@ -738,28 +752,55 @@ async fn forgot_password_verify_mfa(
         }
     }
 
-    // Check if user has MFA enabled
+    // Verify MFA if enabled; non-MFA users skip straight to reset token creation
     let totp_enabled = admin.totp_enabled.unwrap_or(false);
-    if !totp_enabled {
-        // User has no MFA - return same error for enumeration protection
-        // Rate limiter will block repeated attempts
-        return Err(AppError::AuthError("Invalid verification code".to_string()));
-    }
+    if totp_enabled {
+        // Check if account is locked out from too many failed MFA attempts
+        let is_locked = state
+            .auth_backend
+            .is_mfa_locked(admin.id)
+            .await
+            .map_err(|e| AppError::AuthError(e.to_string()))?;
 
-    // Get the decrypted TOTP secret
-    let totp_secret = state
-        .auth_backend
-        .get_totp_secret(admin.id)
-        .await
-        .map_err(|e| AppError::AuthError(e.to_string()))?
-        .ok_or_else(|| AppError::AuthError("Invalid verification code".to_string()))?;
+        if is_locked {
+            return Err(AppError::AuthError(
+                "Account is temporarily locked due to too many failed attempts.".to_string(),
+            ));
+        }
 
-    // Verify with strict mode (zero grace period)
-    let is_valid = totp::verify_code_strict(&totp_secret, &req.code, &admin.email)
-        .map_err(|e| AppError::AuthError(format!("Failed to verify code: {}", e)))?;
+        let totp_secret = state
+            .auth_backend
+            .get_totp_secret(admin.id)
+            .await
+            .map_err(|e| AppError::AuthError(e.to_string()))?
+            .ok_or_else(|| AppError::AuthError("Invalid verification code".to_string()))?;
 
-    if !is_valid {
-        return Err(AppError::AuthError("Invalid verification code".to_string()));
+        let is_valid = totp::verify_code_strict(&totp_secret, &req.code, &admin.email)
+            .map_err(|e| AppError::AuthError(format!("Failed to verify code: {}", e)))?;
+
+        if !is_valid {
+            // Record failed attempt and check if lockout should trigger
+            let (_attempts, is_now_locked) = state
+                .auth_backend
+                .record_mfa_failure(admin.id)
+                .await
+                .map_err(|e| AppError::AuthError(e.to_string()))?;
+
+            if is_now_locked {
+                return Err(AppError::AuthError(
+                    "Too many failed attempts. Account is now temporarily locked.".to_string(),
+                ));
+            }
+
+            return Err(AppError::AuthError("Invalid verification code".to_string()));
+        }
+
+        // Reset failed attempts on success
+        state
+            .auth_backend
+            .reset_mfa_failures(admin.id)
+            .await
+            .map_err(|e| AppError::AuthError(e.to_string()))?;
     }
 
     // Create reset token

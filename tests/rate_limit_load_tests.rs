@@ -34,7 +34,7 @@ fn create_test_server(config: RateLimitConfig) -> TestServer {
         .layer(axum::middleware::from_fn(security_context_middleware))
         .layer(MockConnectInfo(socket_addr));
 
-    TestServer::new(app).unwrap()
+    TestServer::new(app)
 }
 
 #[tokio::test]

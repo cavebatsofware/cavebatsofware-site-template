@@ -50,6 +50,9 @@ pub enum AppError {
 
     #[error("Validation error: {0}")]
     ValidationError(String),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
 }
 
 #[derive(Serialize)]
@@ -82,6 +85,13 @@ impl IntoResponse for AppError {
             AppError::ValidationError(msg) => {
                 tracing::debug!("Validation error: {}", msg);
                 (StatusCode::BAD_REQUEST, msg)
+            }
+            AppError::InternalError(ref e) => {
+                tracing::error!("Internal error: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
         };
 

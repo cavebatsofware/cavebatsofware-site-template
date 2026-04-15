@@ -154,4 +154,28 @@ impl SettingsService {
         Ok(std::env::var("AWS_SES_FROM_EMAIL")
             .unwrap_or_else(|_| "noreply@example.com".to_string()))
     }
+
+    /// Check if admin registration is enabled (defaults to false for security)
+    pub async fn get_admin_registration_enabled(&self) -> Result<bool> {
+        self.get_bool("admin_registration_enabled", Some("system"), None)
+            .await
+    }
+
+    /// Check if access codes feature is enabled (defaults to true)
+    pub async fn get_access_codes_enabled(&self) -> Result<bool> {
+        self.get_bool("access_codes_enabled", Some("features"), None)
+            .await
+    }
+
+    /// Check if contact form feature is enabled (defaults to true)
+    pub async fn get_contact_form_enabled(&self) -> Result<bool> {
+        self.get_bool("contact_form_enabled", Some("features"), None)
+            .await
+    }
+
+    /// Check if newsletter subscriptions feature is enabled (defaults to true)
+    pub async fn get_subscriptions_enabled(&self) -> Result<bool> {
+        self.get_bool("subscriptions_enabled", Some("features"), None)
+            .await
+    }
 }
