@@ -188,18 +188,18 @@
 
             <p>
                 <strong>Expected URL format:</strong><br />
-                <code>{{SITE_URL}}/document/{your-access-code}</code>
+                <code>{% raw %}{{SITE_URL}}{% endraw %}/document/{your-access-code}</code>
             </p>
 
             <p>
                 If you don't have an access code or believe you've reached this
                 page in error, please contact me at
-                <a href="mailto:admin@{{SITE_DOMAIN}}" class="email"
-                    >admin@{{SITE_DOMAIN}}</a
+                <a href="mailto:admin@{% raw %}{{SITE_DOMAIN}}{% endraw %}" class="email"
+                    >admin@{% raw %}{{SITE_DOMAIN}}{% endraw %}</a
                 >
             </p>
 
-            <div class="footer">Grant DeFayette &copy; 2025</div>
+            <div class="footer">{{author}} &copy; {{copyright-year}}</div>
         </div>
     </body>
 </html>

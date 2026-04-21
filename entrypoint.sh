@@ -5,7 +5,7 @@ set -e
 # The app is designed to exit after migrations, so we run it as a separate step.
 if [ "$MIGRATE_DB" = "true" ]; then
   echo "Running database migrations..."
-  /app/cavebatsofware-site-template migrate
+  /app/{{project-name}} migrate
   echo "Migrations complete."
 fi
 
@@ -13,4 +13,4 @@ export RUST_LOG=warn
 
 # Start the main application
 echo "Starting application..."
-exec /app/cavebatsofware-site-template
+exec /app/{{project-name}}

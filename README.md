@@ -1,11 +1,15 @@
-# cavebatsofware-site-template
+# {{project-name}}
 
-[![Cargo Check](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/check.yml/badge.svg)](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/check.yml)
-[![Cargo Format](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/format.yml/badge.svg)](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/format.yml)
-[![Lint](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/lint.yml/badge.svg)](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/lint.yml)
-[![Cargo Audit](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/audit.yml/badge.svg)](https://github.com/cavebatsofware/cavebatsofware-site-template/actions/workflows/audit.yml)
+[![Cargo Check](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/check.yml/badge.svg)](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/check.yml)
+[![Cargo Format](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/format.yml/badge.svg)](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/format.yml)
+[![Lint](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/lint.yml/badge.svg)](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/lint.yml)
+[![Cargo Audit](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/audit.yml/badge.svg)](https://github.com/{{github-org}}/{{project-name}}/actions/workflows/audit.yml)
 
-A site template built with Rust and Axum featuring:
+> Generated from [cavebatsofware-site-template](https://github.com/cavebatsofware/cavebatsofware-site-template) via `cargo generate`.
+
+{{project-description}}
+
+Features:
 - Code-gated document access for controlled distribution (e.g., resumes, proposals)
 - Admin panel (React SPA) with email verification, MFA/TOTP, and RBAC
 - OIDC/Keycloak SSO integration (optional, replaces local auth when enabled)
@@ -28,8 +32,8 @@ A site template built with Rust and Axum featuring:
 
 ```bash
 # Clone and enter the directory
-git clone <repo-url>
-cd cavebatsofware-site-template
+git clone https://github.com/{{github-org}}/{{project-name}}.git
+cd {{project-name}}
 
 # Create environment configuration
 cp .env.example .env
@@ -87,13 +91,16 @@ Admin panel routes (require administrator role):
 Admin SPA:
 - `/admin` - Admin panel (React SPA, serves `index.html` for all `/admin/*` paths)
 
-### Renaming the Template
+### Upstream Template Updates
 
-To rebrand the template for your project, do a project-wide find/replace of `cavebatsofware-site-template` with your application name. Key files to update:
-- `Cargo.toml` (package name)
-- `Makefile` (DOCKER_IMAGE)
-- `README.md`
-- Directory name
+This project was scaffolded from the [cavebatsofware-site-template](https://github.com/cavebatsofware/cavebatsofware-site-template) repository. To pull in improvements from upstream, add it as a remote and cherry-pick commits:
+
+```bash
+git remote add template https://github.com/cavebatsofware/cavebatsofware-site-template.git
+git fetch template
+# inspect commits, then cherry-pick selectively:
+git cherry-pick <commit-sha>
+```
 
 ## Configuration
 

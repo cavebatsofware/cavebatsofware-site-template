@@ -1,32 +1,30 @@
-/*  This file is part of a basic website template project - cavebatsofware-site-template
- *  Copyright (C) 2025 Grant DeFayette & Cavebatsoftware LLC
+{% if license_style == "gpl-3.0" -%}
+/*  This file is part of {{project-name}}
+ *  Copyright (C) {{copyright-year}} {{author}}
  *
- *  cavebatsofware-site-template is free software: you can redistribute it and/or modify
- *  it under the terms of either the GNU General Public License as published by
- *  the Free Software Foundation, version 3 of the License (GPL-3.0-only), OR under
- *  the 3 clause BSD License (BSD-3-Clause).
+ *  {{project-name}} is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, version 3 of the License (GPL-3.0-only).
  *
- *  If you wish to use this software under the GPL-3.0-only license, remove
- *  references to BSD-3-Clause and copies of the BSD-3-Clause license from copies you distribute,
- *  unless you would like to dual-license your modifications to the software.
- *
- *  If you wish to use this software under the BSD-3-Clause license, remove
- *  references to GPL-3.0-only and copies of the GPL-3.0-only License from copies you distribute,
- *  unless you would like to dual-license your modifications to the software.
- *
- *  cavebatsofware-site-template is distributed in the hope that it will be useful,
+ *  {{project-name}} is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License and BSD 3 Clause License
- *  along with cavebatsofware-site-template.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
- *  For BSD-3-Clause terms, see <https://opensource.org/licenses/BSD-3-Clause>
+ *  You should have received a copy of the GNU General Public License
+ *  along with {{project-name}}.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
  */
-
+{%- elsif license_style == "bsd-3-clause" -%}
+/*  This file is part of {{project-name}}
+ *  Copyright (C) {{copyright-year}} {{author}}
+ *
+ *  Licensed under the BSD 3-Clause License.
+ *  See <https://opensource.org/licenses/BSD-3-Clause> for full license text.
+ */
+{%- endif %}
 mod common;
 
-use cavebatsofware_site_template::settings::SettingsService;
+use {{crate_name}}::settings::SettingsService;
 use common::ses_mock::{build_test_email_service_any, EmailSpy};
 use common::{
     build_test_server, build_test_server_with, create_verified_admin, get_csrf_token, login_as,
@@ -58,10 +56,10 @@ async fn build_server_with_spy(
     spy: &EmailSpy,
 ) -> (
     axum_test::TestServer,
-    cavebatsofware_site_template::admin::AdminAuthBackend,
+    {{crate_name}}::admin::AdminAuthBackend,
     sea_orm::DatabaseConnection,
 ) {
-    let db = cavebatsofware_site_template::tests::test_db_from_pool(pool.clone()).await;
+    let db = {{crate_name}}::tests::test_db_from_pool(pool.clone()).await;
     seed_site_settings(&db).await;
     let email = build_test_email_service_any(spy, &db);
     build_test_server_with(

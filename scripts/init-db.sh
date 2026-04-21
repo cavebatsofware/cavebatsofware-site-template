@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Initializing Personal Site database..."
+echo "🔧 Initializing {{project-name}} database..."
 
 # Create extensions if needed
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL

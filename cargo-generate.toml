@@ -1,0 +1,40 @@
+[template]
+cargo_generate_version = ">=0.22.0"
+ignore = [
+    "ReviewFindings.md",
+    "TestCoverageAnalysis.md",
+    "TEMPLATE.md",
+    "hooks",
+    ".zed",
+    ".env",
+    "node_modules",
+    "target",
+    "admin-assets",
+    "public-assets",
+    "backups",
+    ".github/workflows/template-validate.yml",
+]
+exclude = [
+    "admin-frontend",
+    "assets",
+]
+
+[placeholders]
+project-description = { type = "string", prompt = "Short description of the project", default = "A Rust/Axum web application" }
+author = { type = "string", prompt = "Author name", default = "Your Name" }
+author-email = { type = "string", prompt = "Author email", default = "you@example.com" }
+github-org = { type = "string", prompt = "GitHub org or user (for repository URLs)", default = "your-org" }
+copyright-year = { type = "string", prompt = "Copyright year", default = "2026" }
+license_style = { type = "string", prompt = "License", choices = ["gpl-3.0", "bsd-3-clause", "none"], default = "none" }
+
+[hooks]
+pre = ["hooks/pre.rhai"]
+
+[conditional.'license_style == "gpl-3.0"']
+ignore = ["LICENSE-BSD-3-Clause"]
+
+[conditional.'license_style == "bsd-3-clause"']
+ignore = ["LICENSE-GPL-3.0-only"]
+
+[conditional.'license_style == "none"']
+ignore = ["LICENSE-BSD-3-Clause", "LICENSE-GPL-3.0-only"]

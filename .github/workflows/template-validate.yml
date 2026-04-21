@@ -1,0 +1,56 @@
+name: Template Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Generate + cargo check (${{ matrix.license_style }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        license_style: [gpl-3.0, bsd-3-clause, none]
+    env:
+      LICENSE_STYLE: ${{ matrix.license_style }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: cargo-template-validate-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-template-validate-
+
+      - name: Install cargo-generate
+        run: |
+          if ! command -v cargo-generate >/dev/null; then
+            cargo install cargo-generate --features vendored-openssl
+          fi
+
+      - name: Generate scratch project
+        run: |
+          mkdir -p /tmp/tpl-test
+          cargo generate \
+            --path . \
+            --name tpl-test \
+            --destination /tmp/tpl-test \
+            --define 'project-description=CI smoke test' \
+            --define 'author=CI Bot' \
+            --define 'author-email=ci@example.com' \
+            --define 'github-org=ci-org' \
+            --define 'copyright-year=2026' \
+            --define "license_style=$LICENSE_STYLE"
+
+      - name: cargo check
+        working-directory: /tmp/tpl-test/tpl-test
+        run: cargo check --all-targets
