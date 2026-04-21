@@ -1,10 +1,10 @@
 services:
   postgres-test:
     image: postgres:16-alpine
-    container_name: cavebatsofware-site-template-test-db
+    container_name: {{project-name}}-test-db
     environment:
-      POSTGRES_DB: ${TEST_POSTGRES_DB:-personal_site_test}
-      POSTGRES_USER: ${TEST_POSTGRES_USER:-personal_site_test_user}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-{{crate_name}}_test}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-{{crate_name}}_test_user}
       POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-test_password}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
     ports:
@@ -15,19 +15,19 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${TEST_POSTGRES_USER:-personal_site_test_user} -d ${TEST_POSTGRES_DB:-personal_site_test}",
+          "pg_isready -U ${TEST_POSTGRES_USER:-{{crate_name}}_test_user} -d ${TEST_POSTGRES_DB:-{{crate_name}}_test}",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     networks:
-      - cavebatsofware-site-template-test-network
+      - {{project-name}}-test-network
 
 volumes:
   postgres_test_data:
     driver: local
 
 networks:
-  cavebatsofware-site-template-test-network:
+  {{project-name}}-test-network:
     driver: bridge

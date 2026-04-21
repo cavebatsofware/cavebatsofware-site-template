@@ -1,7 +1,15 @@
 [package]
-name = "cavebatsofware-site-template"
-version = "1.26.4"
+name = "{{project-name}}"
+version = "0.1.0"
 edition = "2021"
+authors = ["{{author}} <{{author-email}}>"]
+description = "{{project-description}}"
+repository = "https://github.com/{{github-org}}/{{project-name}}"
+{%- if license_style == "gpl-3.0" %}
+license = "GPL-3.0-only"
+{%- elsif license_style == "bsd-3-clause" %}
+license = "BSD-3-Clause"
+{%- endif %}
 
 [features]
 default = []
@@ -56,7 +64,7 @@ reqwest = { version = "0.12.28", default-features = false, features = ["rustls-t
 url = "2.5.8"
 
 [dev-dependencies]
-cavebatsofware-site-template = { path = ".", features = ["e2e_testing"] }
+{{project-name}} = { path = ".", features = ["e2e_testing"] }
 sqlx = { version = "0.8.6", features = ["migrate"] }
 axum-test = "20.0.0"
 tower = { version = "0.5.3", features = ["util"] }

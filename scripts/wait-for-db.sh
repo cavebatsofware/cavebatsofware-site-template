@@ -5,8 +5,8 @@ set -e
 
 host="${DATABASE_HOST:-localhost}"
 port="${DATABASE_PORT:-5432}"
-user="${POSTGRES_USER:-personal_site_user}"
-db="${POSTGRES_DB:-personal_site}"
+user="${POSTGRES_USER:-{{crate_name}}_user}"
+db="${POSTGRES_DB:-{{crate_name}}}"
 max_attempts="${DB_WAIT_MAX_ATTEMPTS:-30}"
 attempt=1
 

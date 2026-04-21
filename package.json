@@ -1,7 +1,7 @@
 {
-  "name": "document-site",
-  "version": "1.0.0",
-  "description": "A guarded document site built with Rust and Axum that serves a document only to users with valid access codes.",
+  "name": "{{project-name}}",
+  "version": "0.1.0",
+  "description": "{{project-description}}",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
@@ -10,8 +10,8 @@
     "preview": "vite preview"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "{{author}} <{{author-email}}>",
+  "license": "{% if license_style == 'gpl-3.0' %}GPL-3.0-only{% elsif license_style == 'bsd-3-clause' %}BSD-3-Clause{% else %}UNLICENSED{% endif %}",
   "type": "commonjs",
   "dependencies": {
     "@uiw/react-md-editor": "^4.0.8",
@@ -30,10 +30,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cavebatsofware/cavebatsofware-site-template.git"
+    "url": "git+https://github.com/{{github-org}}/{{project-name}}.git"
   },
   "bugs": {
-    "url": "https://github.com/cavebatsofware/cavebatsofware-site-template/issues"
+    "url": "https://github.com/{{github-org}}/{{project-name}}/issues"
   },
-  "homepage": "https://github.com/cavebatsofware/cavebatsofware-site-template#readme"
+  "homepage": "https://github.com/{{github-org}}/{{project-name}}#readme"
 }

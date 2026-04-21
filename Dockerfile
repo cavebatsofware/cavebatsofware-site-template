@@ -26,9 +26,6 @@ RUN apk add --no-cache musl-dev
 # Copy manifest files
 COPY Cargo.toml Cargo.lock ./
 
-# Copy workspace crates
-COPY crates ./crates
-
 # Copy source code
 COPY src ./src
 
@@ -44,7 +41,7 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates
 
 # Copy the binary from builder stage
-COPY --from=builder /app/target/release/cavebatsofware-site-template ./cavebatsofware-site-template
+COPY --from=builder /app/target/release/{{project-name}} ./{{project-name}}
 
 # Copy built admin frontend from frontend-builder stage
 COPY --from=frontend-builder /app/admin-assets ./admin-assets

@@ -1,4 +1,4 @@
-# Personal Site Deployment Makefile
+# {{project-name}} Deployment Makefile
 # Follows the deployment instructions from README.md
 
 # Load environment variables from .env file if it exists
@@ -8,7 +8,7 @@ export
 endif
 
 # Configuration - Uses values from .env or environment variables
-DOCKER_IMAGE := cavebatsofware-site-template
+DOCKER_IMAGE := {{project-name}}
 ECR_REGISTRY ?= $(if $(ECR_REGISTRY_URL),$(ECR_REGISTRY_URL),$(error ECR_REGISTRY_URL not found. Create .env file or set environment variable))
 ECR_REPOSITORY ?= $(if $(ECR_REPO_NAME),$(ECR_REPO_NAME),$(error ECR_REPO_NAME not found. Create .env file or set environment variable))
 ECR_REGION ?= us-east-2
@@ -23,7 +23,7 @@ OCIR_IMAGE = $(if $(OCIR_REGISTRY),$(OCIR_REGISTRY)/$(OCIR_REPOSITORY):latest,)
 # Default target
 .PHONY: help
 help:
-	@echo "Personal Site - Development & Deployment Commands"
+	@echo "{{project-name}} - Development & Deployment Commands"
 	@echo ""
 	@echo "🗄️  Database Commands:"
 	@echo "  make db-up          - Start PostgreSQL database"
@@ -188,9 +188,9 @@ db-up:
 	docker-compose up -d postgres
 	@echo "⏳ Waiting for database to be ready..."
 	@sleep 5
-	@docker-compose exec postgres pg_isready -U $${POSTGRES_USER:-personal_site_user} || echo "Waiting..."
+	@docker-compose exec postgres pg_isready -U $${POSTGRES_USER:-{{crate_name}}_user} || echo "Waiting..."
 	@echo "✅ Database is ready!"
-	@echo "📍 Connection: postgresql://$${POSTGRES_USER:-personal_site_user}:****@localhost:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB:-personal_site}"
+	@echo "📍 Connection: postgresql://$${POSTGRES_USER:-{{crate_name}}_user}:****@localhost:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB:-{{crate_name}}}"
 
 # Stop PostgreSQL database
 .PHONY: db-down
@@ -208,7 +208,7 @@ db-logs:
 .PHONY: db-shell
 db-shell:
 	@echo "🐘 Opening PostgreSQL shell..."
-	docker-compose exec postgres psql -U $${POSTGRES_USER:-personal_site_user} -d $${POSTGRES_DB:-personal_site}
+	docker-compose exec postgres psql -U $${POSTGRES_USER:-{{crate_name}}_user} -d $${POSTGRES_DB:-{{crate_name}}}
 
 # Run database migrations
 .PHONY: db-migrate
@@ -238,8 +238,8 @@ db-reset:
 db-backup:
 	@echo "💾 Creating database backup..."
 	@mkdir -p backups
-	@BACKUP_FILE="backups/personal_site_$$(date +%Y%m%d_%H%M%S).sql"; \
-	docker-compose exec -T postgres pg_dump -U $${POSTGRES_USER:-personal_site_user} $${POSTGRES_DB:-personal_site} > $$BACKUP_FILE; \
+	@BACKUP_FILE="backups/{{crate_name}}_$$(date +%Y%m%d_%H%M%S).sql"; \
+	docker-compose exec -T postgres pg_dump -U $${POSTGRES_USER:-{{crate_name}}_user} $${POSTGRES_DB:-{{crate_name}}} > $$BACKUP_FILE; \
 	echo "✅ Backup created: $$BACKUP_FILE"
 
 # Restore database from backup
@@ -247,10 +247,10 @@ db-backup:
 db-restore:
 	@echo "📂 Available backups:"
 	@ls -lh backups/*.sql 2>/dev/null || echo "No backups found"
-	@read -p "Enter backup filename (e.g., backups/personal_site_20250119_120000.sql): " backup; \
+	@read -p "Enter backup filename (e.g., backups/{{crate_name}}_20250119_120000.sql): " backup; \
 	if [ -f "$$backup" ]; then \
 		echo "♻️  Restoring from $$backup..."; \
-		docker-compose exec -T postgres psql -U $${POSTGRES_USER:-personal_site_user} $${POSTGRES_DB:-personal_site} < $$backup; \
+		docker-compose exec -T postgres psql -U $${POSTGRES_USER:-{{crate_name}}_user} $${POSTGRES_DB:-{{crate_name}}} < $$backup; \
 		echo "✅ Restore complete!"; \
 	else \
 		echo "❌ Backup file not found: $$backup"; \
@@ -267,9 +267,9 @@ test-db-up:
 	docker-compose -f docker-compose.test.yml up -d
 	@echo "⏳ Waiting for test database to be ready..."
 	@sleep 5
-	@docker-compose -f docker-compose.test.yml exec postgres-test pg_isready -U $${TEST_POSTGRES_USER:-personal_site_test_user} || echo "Waiting..."
+	@docker-compose -f docker-compose.test.yml exec postgres-test pg_isready -U $${TEST_POSTGRES_USER:-{{crate_name}}_test_user} || echo "Waiting..."
 	@echo "✅ Test database is ready!"
-	@echo "📍 Connection: postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:****@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}"
+	@echo "📍 Connection: postgresql://$${TEST_POSTGRES_USER:-{{crate_name}}_test_user}:****@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-{{crate_name}}_test}"
 
 # Stop test database
 .PHONY: test-db-down
@@ -291,8 +291,8 @@ test-db-reset:
 .PHONY: test
 test: test-db-up
 	@echo "🧪 Running tests..."
-	DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}" \
-	TEST_DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-personal_site_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-personal_site_test}" \
+	DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-{{crate_name}}_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-{{crate_name}}_test}" \
+	TEST_DATABASE_URL="postgresql://$${TEST_POSTGRES_USER:-{{crate_name}}_test_user}:$${TEST_POSTGRES_PASSWORD:-test_password}@localhost:$${TEST_POSTGRES_PORT:-5433}/$${TEST_POSTGRES_DB:-{{crate_name}}_test}" \
 	cargo test
 
 #
