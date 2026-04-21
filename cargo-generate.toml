@@ -12,6 +12,7 @@ ignore = [
     "admin-assets",
     "public-assets",
     "backups",
+    ".github/workflows/template-validate.yml",
 ]
 exclude = [
     "admin-frontend",
